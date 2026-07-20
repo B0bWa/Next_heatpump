@@ -1,8 +1,9 @@
 # Next_heatpump — Home Assistant Integration
 
-A HACS-compatible custom integration for the **Adlar Castra Aurora II** heat pump, communicating over **Modbus TCP** via an RS485-to-WiFi gateway.
+A HACS-compatible custom integration for the **Heative Next R290 heat pump**, communicating over **Modbus TCP** via an RS485-to-WiFi gateway.
 
 No YAML required. All setup is done through the Home Assistant UI.
+
 This software is a fork of the Adlar Aurora II as developed by https://github.com/conradhagemans. Thank you for this repository! 
 ---
 
@@ -10,16 +11,17 @@ This software is a fork of the Adlar Aurora II as developed by https://github.co
 
 This integration was developed and tested with the following hardware:
 
-<img width="450" height="400" alt="RS485-HUB-2P-details-15" src="https://github.com/user-attachments/assets/3f3bba8a-45e9-4cbe-b179-22879cf514ed" />
+<img width="300" height="250" alt="RS485-HUB-2P-details-15" src="https://github.com/user-attachments/assets/3f3bba8a-45e9-4cbe-b179-22879cf514ed" />
 
+<img width="300" height="250" alt="display" src="https://github.com/user-attachments/assets/20c5453a-56c3-44a9-8a18-39b98387c47c" />
 
-
+<img width="300" height="250" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
 
 
 
 - **Waveshare** RS485 splitter (2 master / 1 slave):
   - **Slave port** → Modbus RS485 cable from the heat pump
-  - **Master 1** → JAN module (original controller)
+  - **Master 1** → Display original controller
   - **Master 2** → Elfin EW11A (RS485 to WiFi/TCP bridge)
 - The **Elfin EW11A** configured as TCP Server on port **502**
 - Modbus slave ID of the heat pump: **1** (default)
@@ -29,7 +31,6 @@ Any RS485-to-Modbus-TCP bridge should work (JPX-3002,Waveshare, USR-W610, etc.).
 ---
 
 ## Elfin EW11 configuration
-<img width="400" height="400" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
 
 
 **Serial Port Settings:**

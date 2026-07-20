@@ -49,7 +49,7 @@ Any RS485-to-Modbus-TCP bridge should work (Waveshare, USR-W610, etc.).
 
 ### Manual
 
-Copy the `custom_components/adlar_heatpump/` folder into your HA `config/custom_components/` directory, then restart.
+Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_components/` directory, then restart.
 
 ---
 

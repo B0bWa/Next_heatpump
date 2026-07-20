@@ -3,7 +3,7 @@
 A HACS-compatible custom integration for the **Adlar Castra Aurora II** heat pump, communicating over **Modbus TCP** via an RS485-to-WiFi gateway.
 
 No YAML required. All setup is done through the Home Assistant UI.
-
+This software is a fork of the Adlar Aurora II as developed by https://github.com/conradhagemans. Thank you for this repository! 
 ---
 
 ## Hardware setup
@@ -44,7 +44,7 @@ Any RS485-to-Modbus-TCP bridge should work (Waveshare, USR-W610, etc.).
 1. Open **HACS → Integrations**
 2. Click the three-dot menu → **Custom repositories**
 3. Add this repository URL, category: **Integration**
-4. Search for **Adlar Heatpump** and install
+4. Search for **Next Heatpump** and install
 5. Restart Home Assistant
 
 ### Manual
@@ -56,7 +56,7 @@ Copy the `custom_components/adlar_heatpump/` folder into your HA `config/custom_
 ## Configuration
 
 1. Go to **Settings → Devices & Services → Add Integration**
-2. Search for **Adlar Heatpump**
+2. Search for **Next Heatpump**
 3. Enter:
    - **IP address** of your RS485-TCP gateway
    - **Port** (default `502`)
@@ -116,7 +116,7 @@ Copy the `custom_components/adlar_heatpump/` folder into your HA `config/custom_
 ### Controls
 | Entity | Type | Options / Range |
 |---|---|---|
-| Adlar Heatpump | Climate | Heat / Cool / Heat+Cool / Off |
+| Next Heatpump | Climate | Heat / Cool / Heat+Cool / Off |
 | Heatpump ON/OFF | Switch | on / off |
 | Temp Set Cooling | Number | 7–25 °C |
 | Temp Set Heating | Number | 15–60 °C |
@@ -132,10 +132,10 @@ Copy the `custom_components/adlar_heatpump/` folder into your HA `config/custom_
 ## Technical notes
 
 ### Modbus addressing
-This integration applies a **-1 address offset** to sensor registers (`0x0040`–`0x0085`). The Aurora II firmware uses 1-based register addressing in this range, while pymodbus uses 0-based addressing. Control registers (`0x0300`+) and status registers (`0x0000`) do not require this correction.
+This integration applies a **-1 address offset** to sensor registers (`0x0040`–`0x0085`). The firmware uses 1-based register addressing in this range, while pymodbus uses 0-based addressing. Control registers (`0x0300`+) and status registers (`0x0000`) do not require this correction.
 
 ### Registers not available on R32 model
-The following registers always return 0 on the R32 (Aurora II) model and are excluded:
+The following registers always return 0 on the R32 model and are excluded:
 - `0x0044` AC Input Voltage
 - `0x0047` Compressor IPM Temperature
 
@@ -145,5 +145,5 @@ The default scan interval is 60 seconds. With ~40 registers × 200ms delay = ~8 
 ---
 
 ## Disclaimer
-
+This software is public and not in anyway related to Heative, SolarEast etc. Use at you own risk.
 This integration is community-developed and not affiliated with Adlår. Use at your own risk. Incorrect writes to control registers could affect heat pump operation. Always verify setpoints before applying changes.

@@ -8,7 +8,7 @@ A HACS-compatible custom integration for the **Heative Next R290 heat pump**, co
 
 No YAML required. All setup is done through the Home Assistant UI.
 
-This software is a fork of the Adlar Aurora II as developed by https://github.com/conradhagemans. Thank you for this repository! 
+This software is a fork of the Adlar Aurora II repository as developed by https://github.com/conradhagemans. Thank you for this repository! 
 ---
 
 ## Hardware setup

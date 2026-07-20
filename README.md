@@ -1,6 +1,7 @@
 # Next_heatpump — Home Assistant Integration
 
-<img width="500" height="400" alt="xlarge_Heative_Next_R290_2025_Voorkant_perspectief_witruimte_4c5170e033" src="https://github.com/user-attachments/assets/9e5cb484-7ee7-44e2-9472-8e2d30d3d0d4" />
+
+<img width="400" height="300" alt="xlarge_Heative_Next_Incl_R290_9bada899cd" src="https://github.com/user-attachments/assets/b314144f-d007-4edc-bede-11d402fa12d3" />
 
 
 A HACS-compatible custom integration for the **Heative Next R290 heat pump**, communicating over **Modbus TCP** via an RS485-to-WiFi gateway.

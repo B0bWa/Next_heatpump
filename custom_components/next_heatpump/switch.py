@@ -44,7 +44,7 @@ class NextSwitch(CoordinatorEntity, SwitchEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Next Heatpump",
+            "name": "",
             "manufacturer": "Heative",
-            "model": "R290",
+            "model": "",
         }

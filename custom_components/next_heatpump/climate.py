@@ -57,7 +57,7 @@ async def async_setup_entry(
 class NextClimate(CoordinatorEntity, ClimateEntity):
     """Climate entity for Next R290."""
 
-    _attr_name = "Next Heatpump"
+    _attr_name = "Next Hp"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.HEAT, HVACMode.HEAT_COOL]
     _attr_supported_features = (
@@ -179,7 +179,7 @@ class NextClimate(CoordinatorEntity, ClimateEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Next Heatpump R290",
+            "name": "",
             "manufacturer": "Heative",
-            "model": "R290",
+            "model": "",
         }

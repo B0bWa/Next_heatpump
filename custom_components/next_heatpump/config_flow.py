@@ -43,7 +43,7 @@ class NextConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 return self.async_create_entry(
-                    title=f"Adlar Heatpump ({user_input[CONF_HOST]})",
+                    title=f"Next Heatpump ({user_input[CONF_HOST]})",
                     data=user_input,
                 )
 

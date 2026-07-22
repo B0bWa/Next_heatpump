@@ -37,7 +37,7 @@ class NextBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Next R290 Heatpump",
+            "name": "",
             "manufacturer": "Heative",
-            "model": "R290",
+            "model": "",
         }

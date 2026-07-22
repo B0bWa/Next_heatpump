@@ -62,13 +62,13 @@ class NextSensor(CoordinatorEntity, SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Next Heatpump",
+            "name": "",
             "manufacturer": "Heative",
-            "model": "R290",
+            "model": "",
         }
 
 
-class AdlarEnergySensor(CoordinatorEntity, SensorEntity):
+class NextEnergySensor(CoordinatorEntity, SensorEntity):
     """Totaal energieverbruik sensor.
 
     Gebruikt state_class=TOTAL zodat Home Assistant een daling (bijv. na reset
@@ -92,13 +92,13 @@ class AdlarEnergySensor(CoordinatorEntity, SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Adlar Aurora II Heatpump",
-            "manufacturer": "Adlar",
-            "model": "Aurora II",
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
         }
 
 
-class AdlarThermalPowerSensor(CoordinatorEntity, SensorEntity):
+class NextThermalPowerSensor(CoordinatorEntity, SensorEntity):
     """Thermal power output calculated from flow and delta-T."""
 
     def __init__(self, coordinator):
@@ -127,13 +127,13 @@ class AdlarThermalPowerSensor(CoordinatorEntity, SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Adlar Aurora II Heatpump",
-            "manufacturer": "Adlar",
-            "model": "Aurora II",
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
         }
 
 
-class AdlarCOPSensor(CoordinatorEntity, SensorEntity):
+class NextCOPSensor(CoordinatorEntity, SensorEntity):
     """COP = Thermal Power / Electrical Power."""
 
     def __init__(self, coordinator):
@@ -165,13 +165,13 @@ class AdlarCOPSensor(CoordinatorEntity, SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Adlar Aurora II Heatpump",
-            "manufacturer": "Adlar",
-            "model": "Aurora II",
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
         }
 
 
-class AdlarCalculatedPowerSensor(CoordinatorEntity, SensorEntity):
+class NextCalculatedPowerSensor(CoordinatorEntity, SensorEntity):
     """Estimated power = Supply Voltage x Compressor Current Draw."""
 
     def __init__(self, coordinator):
@@ -199,13 +199,13 @@ class AdlarCalculatedPowerSensor(CoordinatorEntity, SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Adlar Aurora II Heatpump",
-            "manufacturer": "Adlar",
-            "model": "Aurora II",
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
         }
 
 
-class AdlarRefrigerantSensor(CoordinatorEntity, SensorEntity):
+class NextRefrigerantSensor(CoordinatorEntity, SensorEntity):
     """Koelmiddeltype sensor — toont R32/R290/R410A op basis van P119 (0x0177)."""
 
     def __init__(self, coordinator):
@@ -232,7 +232,7 @@ class AdlarRefrigerantSensor(CoordinatorEntity, SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
-            "name": "Adlar Aurora II Heatpump",
-            "manufacturer": "Adlar",
-            "model": "Aurora II",
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
         }

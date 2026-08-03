@@ -13,7 +13,7 @@ This software is a fork of the Adlar Aurora II repository as developed by https:
 
 ## Hardware setup
 
-This integration was developed and tested with the following hardware:
+This integration was developed and tested with the following hardware NOT WORKING YET, only Ha sole one connection directly no display or Waveshare attached!!:
 
 <img width="300" height="250" alt="RS485-HUB-2P-details-15" src="https://github.com/user-attachments/assets/3f3bba8a-45e9-4cbe-b179-22879cf514ed" />
 

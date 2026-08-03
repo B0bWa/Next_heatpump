@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import ctypes
+import threading
 import time
 from datetime import timedelta
 
@@ -25,9 +26,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Delay between individual register reads (seconds)
-# Gives the JPX-3002 splitter and EW11 time to process each request
-REQUEST_DELAY = 0.2
+WRITE_DELAY = 0.25
+REQUEST_DELAY = 0.5
+
+# Aantal pogingen per registerlezing voordat we het als mislukt beschouwen
+READ_ATTEMPTS = 2
 
 # Registers die een temperatuur zijn (device_class == "temperature")
 # Schaling wordt bepaald door P119 koelmiddeltype
@@ -45,6 +48,13 @@ class NextCoordinator(DataUpdateCoordinator):
         self.port = port
         self.slave = slave
         self._client = None
+        # ModbusTcpClient is not thread-safe, and both the polling cycle
+        # (_fetch_all, run in an executor thread) and service/entity writes
+        # (write_register, run in their own executor thread) share
+        # self._client. This lock ensures only one thread touches the
+        # socket at a time — prevents "Bad file descriptor" races where
+        # one thread closes the connection while another is mid read/write.
+        self._lock = threading.Lock()
         self.refrigerant_type: int | None = None
         self.refrigerant_name: str = "Unknown"
         self.temperature_scale: float = 1.0  # default R32
@@ -62,30 +72,53 @@ class NextCoordinator(DataUpdateCoordinator):
                     self._client.close()
                 except Exception:
                     pass
-            self._client = ModbusTcpClient(host=self.host, port=self.port, timeout=10)
+            self._client = ModbusTcpClient(
+                host=self.host, port=self.port, timeout=10, retries=3
+            )
             self._client.connect()
         return self._client
 
-    def _read_one(self, address: int) -> int | None:
+    def _read_one(self, address: int, attempts: int = READ_ATTEMPTS) -> int | None:
         """Read a single holding register with delay. Reconnects on failure.
 
         No address offset is applied. pymodbus uses 0-based addressing natively,
         identical to jsmodbus. Register 0x0040 = address 0x0040.
+
+        Probeert een read tot `attempts` keer voordat de client wordt weggegooid
+        en None wordt teruggegeven — voorkomt dat één hikkende read de hele
+        cyclus dwingt tot herhaaldelijk herverbinden.
         """
-        time.sleep(REQUEST_DELAY)
-        try:
-            client = self._get_client()
-            result = client.read_holding_registers(
-                address=address, count=1, device_id=self.slave
+        last_err: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            time.sleep(REQUEST_DELAY)
+            try:
+                with self._lock:
+                    client = self._get_client()
+                    result = client.read_holding_registers(
+                        address=address, count=1, device_id=self.slave
+                    )
+                if hasattr(result, 'isError') and result.isError():
+                    _LOGGER.warning(
+                        "Error reading register 0x%04X (attempt %d/%d)",
+                        address, attempt, attempts,
+                    )
+                    continue
+                return result.registers[0]
+            except Exception as err:
+                last_err = err
+                _LOGGER.warning(
+                    "Exception reading 0x%04X (attempt %d/%d): %s",
+                    address, attempt, attempts, err,
+                )
+                with self._lock:
+                    self._client = None
+
+        if last_err is not None:
+            _LOGGER.warning(
+                "Gaf op na %d pogingen voor register 0x%04X: %s — reconnecting",
+                attempts, address, last_err,
             )
-            if hasattr(result, 'isError') and result.isError():
-                _LOGGER.warning("Error reading register 0x%04X", address)
-                return None
-            return result.registers[0]
-        except Exception as err:
-            _LOGGER.warning("Exception reading 0x%04X: %s — reconnecting", address, err)
-            self._client = None
-            return None
+        return None
 
     def _detect_refrigerant(self) -> None:
         """Lees P119 (0x0177) en stel temperatuurschaling in.
@@ -122,72 +155,91 @@ class NextCoordinator(DataUpdateCoordinator):
 
     def _fetch_all(self) -> dict:
         data: dict = {}
+        try:
+            # ── Eénmalig: koelmiddeltype detecteren ──
+            if self.refrigerant_type is None:
+                self._detect_refrigerant()
 
-        # ── Eénmalig: koelmiddeltype detecteren ──
-        if self.refrigerant_type is None:
-            self._detect_refrigerant()
+            # Sla koelmiddelinfo op in data zodat het als sensor beschikbaar is
+            data["Refrigerant Type"] = self.refrigerant_name
+            data["Temperature Scale"] = self.temperature_scale
 
-        # Sla koelmiddelinfo op in data zodat het als sensor beschikbaar is
-        data["Refrigerant Type"] = self.refrigerant_name
-        data["Temperature Scale"] = self.temperature_scale
+            # ── Compressor target frequency ──
+            raw = self._read_one(0x0027)
+            data["Compressor Target Frequency"] = raw
 
-        # ── Compressor target frequency ──
-        raw = self._read_one(0x0027)
-        data["Compressor Target Frequency"] = raw
-
-        # ── Sensor registers ──
-        for address, name, unit, device_class, scale, signed in SENSOR_REGISTERS:
-            raw = self._read_one(address)
-            if raw is None:
-                data[name] = None
-            else:
-                value = _to_signed(raw) if signed else raw
-                # Temperatuurregisters: schaling uit P119
-                if device_class == TEMPERATURE_DEVICE_CLASS:
-                    effective_scale = self.temperature_scale
+            # ── Sensor registers ──
+            for address, name, unit, device_class, scale, signed in SENSOR_REGISTERS:
+                raw = self._read_one(address)
+                if raw is None:
+                    data[name] = None
                 else:
-                    effective_scale = scale
-                data[name] = round(value * effective_scale, 1) if effective_scale != 1 else value
+                    value = _to_signed(raw) if signed else raw
+                    # Temperatuurregisters: schaling uit P119
+                    if device_class == TEMPERATURE_DEVICE_CLASS:
+                        effective_scale = self.temperature_scale
+                    else:
+                        effective_scale = scale
+                    data[name] = round(value * effective_scale, 1) if effective_scale != 1 else value
 
-        # ── Energy register (single 16-bit, value directly in kWh) ──
-        raw = self._read_one(ENERGY_REGISTER)
-        data["Unit Power Consumption"] = float(raw) if raw is not None else None
+            # ── Energy register (single 16-bit, value directly in kWh) ──
+            raw = self._read_one(ENERGY_REGISTER)
+            data["Unit Power Consumption"] = float(raw) if raw is not None else None
 
-        # ── Status bitmask ──
-        raw_status = self._read_one(STATUS_REGISTER)
-        for mask, bit_name in STATUS_BITS:
-            data[bit_name] = bool(raw_status & mask) if raw_status is not None else None
+            # ── Status bitmask ──
+            raw_status = self._read_one(STATUS_REGISTER)
+            for mask, bit_name in STATUS_BITS:
+                data[bit_name] = bool(raw_status & mask) if raw_status is not None else None
 
-        # ── Number registers (control register area) ──
-        for address, name, unit, device_class, mn, mx, step in NUMBER_REGISTERS:
-            raw = self._read_one(address)
-            data[name] = _to_signed(raw) if raw is not None else None
+            # ── Number registers (control register area) ──
+            for address, name, unit, device_class, mn, mx, step in NUMBER_REGISTERS:
+                raw = self._read_one(address)
+                data[name] = _to_signed(raw) if raw is not None else None
 
-        # ── Switch register ──
-        raw = self._read_one(SWITCH_REGISTER)
-        data["ON/OFF"] = bool(raw) if raw is not None else None
+            # ── Switch register ──
+            raw = self._read_one(SWITCH_REGISTER)
+            data["ON/OFF"] = bool(raw) if raw is not None else None
 
-        # ── Select registers ──
-        for address, name, options_map in SELECT_REGISTERS:
-            raw = self._read_one(address)
-            if raw is None:
-                data[name] = None
-            else:
-                rev = {v: k for k, v in options_map.items()}
-                data[name] = rev.get(raw, f"Unknown ({raw})")
+            # ── Select registers ──
+            for address, name, options_map in SELECT_REGISTERS:
+                raw = self._read_one(address)
+                if raw is None:
+                    data[name] = None
+                else:
+                    rev = {v: k for k, v in options_map.items()}
+                    data[name] = rev.get(raw, f"Unknown ({raw})")
 
-        return data
+            return data
+        finally:
+            # Close the connection at the end of every cycle so the socket
+            # never sits idle across scan_interval — avoids stale/half-closed
+            # connections that the device silently drops between polls.
+            with self._lock:
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None
 
     def write_register(self, address: int, value: int) -> bool:
         """Write a single holding register."""
-        try:
-            time.sleep(REQUEST_DELAY)
-            client = self._get_client()
-            result = client.write_register(
-                address=address, value=value, device_id=self.slave
-            )
-            return not result.isError()
-        except Exception as err:
-            _LOGGER.error("Write error at 0x%04X: %s", address, err)
-            self._client = None
-            return False
+        time.sleep(REQUEST_DELAY)
+        with self._lock:
+            try:
+                client = self._get_client()
+                result = client.write_register(
+                    address=address, value=value, device_id=self.slave
+                )
+                return not result.isError()
+            except Exception as err:
+                _LOGGER.error("Write error at 0x%04X: %s", address, err)
+                self._client = None
+                return False
+            finally:
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None

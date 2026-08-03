@@ -42,8 +42,9 @@ Any RS485-to-Modbus-TCP bridge should work (JPX-3002,Waveshare, USR-W610, etc.).
 - Data Bit: `8`
 - Stop Bit: `1`
 - Parity: `None`
-- Buffer Size: `1024`
-- Gap Time: `100`
+- Buffer Size: `2048`
+- Gap Time: `200`
+- 
 
 **Communication Settings:**
 - Protocol: `TCP Server`

@@ -13,9 +13,8 @@ This software is a fork of the Adlar Aurora II repository as developed by https:
 
 ## Hardware setup
 
-This integration was developed and tested with the following hardware NOT WORKING YET, only Ha sole one connection directly no display or Waveshare attached!!:
+This integration was developed and tested with the following hardware NOT WORKING YET, only Ha sole one connection directly no display or Waveshare attached!!: The Waveshare is 1 master 2 slave device. not working at all. ordered E810-r21 instead.
 
-<img width="300" height="250" alt="RS485-HUB-2P-details-15" src="https://github.com/user-attachments/assets/3f3bba8a-45e9-4cbe-b179-22879cf514ed" />
 
 <img width="300" height="250" alt="display" src="https://github.com/user-attachments/assets/20c5453a-56c3-44a9-8a18-39b98387c47c" />
 
@@ -23,14 +22,14 @@ This integration was developed and tested with the following hardware NOT WORKIN
 
 
 
-- **Waveshare** RS485 splitter (2 master / 1 slave):
+- **E810-R21 Ebyte** RS485 splitter (2 master / 1 slave):
   - **Slave port** → Modbus RS485 cable from the heat pump
   - **Master 1** → Display original controller
   - **Master 2** → Elfin EW11A (RS485 to WiFi/TCP bridge)
 - The **Elfin EW11A** configured as TCP Server on port **502**
 - Modbus slave ID of the heat pump: **1** (default)
 
-Any RS485-to-Modbus-TCP bridge should work (JPX-3002,Waveshare, USR-W610, etc.).
+Any RS485-to-Modbus-TCP bridge should work (Elfin, USR-W610, etc.).
 
 ---
 

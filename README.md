@@ -48,7 +48,7 @@ Any RS485-to-Modbus-TCP bridge should work (Elfin, USR-W610, etc.).
 **Communication Settings:**
 - Protocol: `TCP Server`
 - Local Port: `502`
-
+- max 1 connection allowed
 ---
 
 ## Installation

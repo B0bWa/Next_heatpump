@@ -20,6 +20,7 @@ This integration was developed and tested with the following hardware NOT WORKIN
 
 <img width="300" height="250" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
 
+<img width="300" height="250" alt="Naamloos" src="https://github.com/user-attachments/assets/f37784bc-e5b3-4190-a267-d83e73a5b944" />
 
 
 - **E810-R21 Ebyte** RS485 splitter (2 master / 1 slave):

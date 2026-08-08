@@ -55,6 +55,15 @@ class NextCoordinator(DataUpdateCoordinator):
         # socket at a time — prevents "Bad file descriptor" races where
         # one thread closes the connection while another is mid read/write.
         self._lock = threading.Lock()
+        # Teller: aantal implausibele waarden (buiten min_val/max_val) die
+        # tijdens de laatste pollcyclus zijn afgevangen en opnieuw geprobeerd.
+        # Gereset aan het begin van elke _fetch_all-cyclus.
+        self._implausible_count = 0
+        # Laatst succesvol (plausibel) gelezen register — gebruikt om te loggen
+        # welk register vlak vóór een implausibele lezing werd gelezen, om een
+        # "antwoord komt één stap te laat"-mismatch te kunnen herkennen.
+        self._last_read_address: int | None = None
+        self._last_read_value: int | None = None
         self.refrigerant_type: int | None = None
         self.refrigerant_name: str = "Unknown"
         self.temperature_scale: float = 1.0  # default R32
@@ -78,7 +87,13 @@ class NextCoordinator(DataUpdateCoordinator):
             self._client.connect()
         return self._client
 
-    def _read_one(self, address: int, attempts: int = READ_ATTEMPTS) -> int | None:
+    def _read_one(
+        self,
+        address: int,
+        attempts: int = READ_ATTEMPTS,
+        min_val: int | None = None,
+        max_val: int | None = None,
+    ) -> int | None:
         """Read a single holding register with delay. Reconnects on failure.
 
         No address offset is applied. pymodbus uses 0-based addressing natively,
@@ -87,6 +102,11 @@ class NextCoordinator(DataUpdateCoordinator):
         Probeert een read tot `attempts` keer voordat de client wordt weggegooid
         en None wordt teruggegeven — voorkomt dat één hikkende read de hele
         cyclus dwingt tot herhaaldelijk herverbinden.
+
+        Als min_val/max_val zijn opgegeven, wordt een waarde buiten dat bereik
+        behandeld als een mislukte read (kan wijzen op een mismatch tussen
+        verzoek en antwoord bij de RTU-TCP gateway) en opnieuw geprobeerd.
+        De vergelijking gebeurt op de signed-geïnterpreteerde waarde.
         """
         last_err: Exception | None = None
         for attempt in range(1, attempts + 1):
@@ -103,7 +123,36 @@ class NextCoordinator(DataUpdateCoordinator):
                         address, attempt, attempts,
                     )
                     continue
-                return result.registers[0]
+
+                value = result.registers[0]
+
+                if min_val is not None and max_val is not None:
+                    signed_value = _to_signed(value)
+                    if not (min_val <= signed_value <= max_val):
+                        self._implausible_count += 1
+                        if self._last_read_address is not None:
+                            _LOGGER.warning(
+                                "Implausibele waarde %d (verwacht %d..%d) voor "
+                                "register 0x%04X (attempt %d/%d) — vorig gelezen "
+                                "register was 0x%04X met waarde %s — waarschijnlijk "
+                                "mismatch, opnieuw proberen",
+                                signed_value, min_val, max_val, address, attempt, attempts,
+                                self._last_read_address, self._last_read_value,
+                            )
+                        else:
+                            _LOGGER.warning(
+                                "Implausibele waarde %d (verwacht %d..%d) voor "
+                                "register 0x%04X (attempt %d/%d) — geen vorig "
+                                "register bekend — waarschijnlijk mismatch, "
+                                "opnieuw proberen",
+                                signed_value, min_val, max_val, address, attempt, attempts,
+                            )
+                        continue
+
+                # Alleen bijhouden bij een geslaagde, plausibele read
+                self._last_read_address = address
+                self._last_read_value = value
+                return value
             except Exception as err:
                 last_err = err
                 _LOGGER.warning(
@@ -155,6 +204,8 @@ class NextCoordinator(DataUpdateCoordinator):
 
     def _fetch_all(self) -> dict:
         data: dict = {}
+        # Reset de teller voor implausibele waarden aan het begin van elke cyclus.
+        self._implausible_count = 0
         try:
             # ── Eénmalig: koelmiddeltype detecteren ──
             if self.refrigerant_type is None:
@@ -169,8 +220,8 @@ class NextCoordinator(DataUpdateCoordinator):
             data["Compressor Target Frequency"] = raw
 
             # ── Sensor registers ──
-            for address, name, unit, device_class, scale, signed in SENSOR_REGISTERS:
-                raw = self._read_one(address)
+            for address, name, unit, device_class, scale, signed, min_val, max_val in SENSOR_REGISTERS:
+                raw = self._read_one(address, min_val=min_val, max_val=max_val)
                 if raw is None:
                     data[name] = None
                 else:
@@ -193,7 +244,7 @@ class NextCoordinator(DataUpdateCoordinator):
 
             # ── Number registers (control register area) ──
             for address, name, unit, device_class, mn, mx, step in NUMBER_REGISTERS:
-                raw = self._read_one(address)
+                raw = self._read_one(address, min_val=mn, max_val=mx)
                 data[name] = _to_signed(raw) if raw is not None else None
 
             # ── Switch register ──
@@ -208,6 +259,13 @@ class NextCoordinator(DataUpdateCoordinator):
                 else:
                     rev = {v: k for k, v in options_map.items()}
                     data[name] = rev.get(raw, f"Unknown ({raw})")
+
+            if self._implausible_count:
+                _LOGGER.info(
+                    "Pollcyclus voltooid met %d implausibele waarde(n) "
+                    "afgevangen en herprobeerd",
+                    self._implausible_count,
+                )
 
             return data
         finally:

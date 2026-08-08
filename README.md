@@ -42,8 +42,8 @@ Any RS485-to-Modbus-TCP bridge should work (Elfin, USR-W610, etc.).
 - Data Bit: `8`
 - Stop Bit: `1`
 - Parity: `None`
-- Buffer Size: `2048`
-- Gap Time: `200`
+- Buffer Size: `512`
+- Gap Time: `100`
 - 
 
 **Communication Settings:**
@@ -76,7 +76,7 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
    - **IP address** of your RS485-TCP gateway
    - **Port** (default `502`)
    - **Slave ID** (default `1`)
-   - **Scan interval** in seconds (default `60`)
+   - **Scan interval** in seconds (default `30`)
 
 ---
 

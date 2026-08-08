@@ -1,1 +1,178 @@
-
+views:
+  - title: Overzicht
+    path: overzicht
+    icon: mdi:home-thermometer
+    cards:
+      - type: entities
+        title: Status
+        entities:
+          - entity: climate.next_hp
+          - entity: switch.heatpump_on_off
+          - entity: select.mode
+          - entity: select.running_mode
+          - entity: binary_sensor.running_status_unit_operation
+            name: In bedrijf
+          - entity: binary_sensor.running_status_fault_alarm
+            name: Storing
+      - type: glance
+        title: Kerncijfers
+        columns: 3
+        entities:
+          - entity: sensor.cop
+            name: COP
+          - entity: sensor.thermal_power
+            name: Thermisch vermogen
+          - entity: sensor.unit_power_consumption
+            name: Verbruik
+      - type: entities
+        title: Temperaturen kort
+        entities:
+          - entity: sensor.ambient_temp_t1
+            name: Buitentemp.
+          - entity: sensor.water_outlet_temp_t7
+            name: Water uit
+          - entity: sensor.water_inlet_temp_t6
+            name: Water in
+          - entity: sensor.dhw_tank_temp
+            name: Boiler (DHW)
+      - type: history-graph
+        title: Vermogen laatste 24u
+        hours_to_show: 24
+        entities:
+          - sensor.unit_power_consumption
+          - sensor.thermal_power
+      - type: statistics-graph
+        title: COP trend (7 dagen)
+        entities:
+          - sensor.cop
+        stat_types:
+          - mean
+          - min
+          - max
+        days_to_show: 7
+        period: day
+      - type: entities
+        title: Energie vandaag
+        entities:
+          - entity: sensor.energieverbruik_warmtepomp
+            name: Verbruik (elektrisch)
+          - entity: sensor.thermische_energie_warmtepomp
+            name: Opbrengst (thermisch)
+      - type: statistics-graph
+        title: Energieverbruik & -opbrengst (7 dagen)
+        entities:
+          - sensor.energieverbruik_warmtepomp
+          - sensor.thermische_energie_warmtepomp
+        stat_types:
+          - sum
+        days_to_show: 7
+        period: day
+        chart_type: bar
+  - title: Temperaturen
+    path: temperaturen
+    icon: mdi:thermometer
+    cards:
+      - type: entities
+        title: Water & omgeving
+        entities:
+          - sensor.ambient_temp_t1
+          - sensor.outer_coil_temp_t2
+          - sensor.inner_coil_temp_t3
+          - sensor.water_inlet_temp_t6
+          - sensor.water_outlet_temp_t7
+          - sensor.dhw_tank_temp
+          - sensor.dhw_return_water_temp
+          - sensor.plate_hx_exhaust_temp
+      - type: entities
+        title: Koelcircuit / compressor
+        entities:
+          - sensor.suction_temp_t4
+          - sensor.exhaust_temp_t5
+          - sensor.compressor_ipm_temp
+          - sensor.high_pressure_saturation_temp
+          - sensor.low_pressure_saturation_temp
+          - sensor.economizer_inlet_temp_t8
+          - sensor.economizer_outlet_temp_t9
+      - type: history-graph
+        title: Temperatuurverloop
+        hours_to_show: 24
+        entities:
+          - sensor.ambient_temp_t1
+          - sensor.water_inlet_temp_t6
+          - sensor.water_outlet_temp_t7
+          - sensor.dhw_tank_temp
+  - title: Elektrisch & Vermogen
+    path: elektrisch
+    icon: mdi:flash
+    cards:
+      - type: entities
+        title: Netaansluiting
+        entities:
+          - sensor.ac_input_voltage
+          - sensor.ac_input_current
+          - sensor.unit_input_voltage
+          - sensor.unit_input_current
+          - sensor.unit_input_power
+          - sensor.dc_bus_inverter_voltage
+      - type: entities
+        title: Compressor
+        entities:
+          - sensor.compressor_phase_current
+          - entity: sensor.next_heatpump_192_168_2_94_compressor_running_frequency
+            name: Compressor draaifrequentie
+          - sensor.compressor_target_frequency
+      - type: entities
+        title: Vermogen & rendement
+        entities:
+          - sensor.thermal_power
+          - sensor.calculated_power
+          - sensor.unit_power_consumption
+          - sensor.cop
+      - type: history-graph
+        title: Stroom & vermogen
+        hours_to_show: 48
+        entities:
+          - sensor.unit_input_current
+          - sensor.unit_power_consumption
+  - title: Bediening
+    path: bediening
+    icon: mdi:tune
+    cards:
+      - type: entities
+        title: Aan/uit & modus
+        entities:
+          - switch.heatpump_on_off
+          - select.mode
+          - select.running_mode
+      - type: entities
+        title: Temperatuur instellingen
+        entities:
+          - number.temp_set_cooling
+          - number.temp_set_heating
+          - number.temp_set_hot_water
+          - number.temp_set_floor_heating
+      - type: entities
+        title: Stooklijnen (curves)
+        entities:
+          - select.cooling_setting_curve
+          - select.heating_setting_curve
+          - select.hot_water_setting_curve
+          - select.underfloor_heating_setting_curve
+  - title: Diagnostiek
+    path: diagnostiek
+    icon: mdi:wrench-cog
+    cards:
+      - type: entities
+        title: Mechaniek
+        entities:
+          - sensor.fan_running_speed
+          - sensor.eev_open_step
+          - sensor.evi_valve_open_step
+          - sensor.water_pump_speed_pwm
+          - sensor.water_flow
+      - type: entities
+        title: Overig
+        entities:
+          - sensor.refrigerant_type
+          - binary_sensor.running_status_fault_alarm
+          - binary_sensor.running_status_unit_operation

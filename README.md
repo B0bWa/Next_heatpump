@@ -137,10 +137,11 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
 | Temp Set Heating | Number | 15–60 °C |
 | Temp Set Floor Heating | Number | 20–60 °C |
 | Mode | Select | Cooling / Heating / Hot Water / Floor Heating / combinations |
-| Running Mode | Select | Standard Mode / Boost / Silent |
+| Running Mode | Select | Standard Mode / Boost / Eco |
 | Cooling Setting Curve | Select | Off, H1–H8, L1–L8 |
 | Heating Setting Curve | Select | Off, H1–H8, L1–L8 |
 | Underfloor Heating Setting Curve | Select | Off, H1–H8, L1–L8 |
+| Hot water Setting Curve | Select | Off, 1-4 |
 
 ---
 
@@ -155,7 +156,7 @@ The following registers always return 0 on the R32 model and are excluded:
 - `0x0047` Compressor IPM Temperature
 
 ### Scan interval
-The default scan interval is 60 seconds. With ~40 registers × 200ms delay = ~8 seconds per poll cycle, a minimum of 30 seconds is recommended.
+The default scan interval is 30 seconds. With ~40 registers × 200ms delay = ~8 seconds per poll cycle, a minimum of 30 seconds is recommended.
 
 ---
 

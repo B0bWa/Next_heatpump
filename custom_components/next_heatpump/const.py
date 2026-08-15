@@ -3,7 +3,7 @@
 DOMAIN = "next_heatpump"
 DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1
-DEFAULT_SCAN_INTERVAL = 30
+DEFAULT_SCAN_INTERVAL = 45
 
 # ─────────────────────────────────────────────
 # Register definitions — adressen gebaseerd op HHI Modbus repo v2.2

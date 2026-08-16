@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import ctypes
+import random
 import threading
 import time
 from datetime import timedelta
@@ -28,9 +29,29 @@ _LOGGER = logging.getLogger(__name__)
 
 WRITE_DELAY = 0.25
 REQUEST_DELAY = 0.5
+# Kleine willekeurige variatie op REQUEST_DELAY, zodat onze polling niet
+# steeds op exact dezelfde momenten valt als het pollritme van een andere
+# Modbus-master op de bus (bijv. een display via een RS485-splitter).
+REQUEST_DELAY_JITTER = 0.2
 
 # Aantal pogingen per registerlezing voordat we het als mislukt beschouwen
 READ_ATTEMPTS = 2
+
+# ── Bus-contentie / "circuit breaker" ──
+# Als meerdere registers/batches ná elkaar volledig mislukken, is dat een
+# sterke aanwijzing dat de gedeelde RS485-bus op dit moment bezet is door
+# een andere master (bijv. een display via een 2-master/1-slave splitter),
+# niet dat onze eigen instellingen fout staan. Doorrammen met de gebruikelijke
+# REQUEST_DELAY helpt dan niet en genereert alleen maar extra reconnects naar
+# de RTU-TCP gateway terwijl die het al druk heeft. In plaats daarvan pauzeren
+# we een tijdje zodat de bus kan vrijkomen, en gaan daarna pas weer verder.
+CONSECUTIVE_FAILURE_THRESHOLD = 3
+BURST_COOLDOWN = 8.0  # seconden
+
+# Maximaal aantal registers dat in één Modbus-call wordt gebatcht.
+# Ruim onder de Modbus-limiet van 125, en klein genoeg om een batch op
+# 9600 bd nog in een fractie van een seconde te versturen/ontvangen.
+MAX_BATCH_SIZE = 32
 
 # Registers die een temperatuur zijn (device_class == "temperature")
 # Schaling wordt bepaald door P119 koelmiddeltype
@@ -39,6 +60,35 @@ TEMPERATURE_DEVICE_CLASS = "temperature"
 
 def _to_signed(value: int) -> int:
     return ctypes.c_int16(value).value
+
+
+def _contiguous_runs(specs: list[tuple], max_batch: int = MAX_BATCH_SIZE) -> list[list[tuple]]:
+    """Groepeer registerspecs (waarvan specs[i][0] het adres is) in reeksen
+    van opeenvolgende adressen, zodat ze in één Modbus-call gelezen kunnen
+    worden i.p.v. één call per register.
+
+    Een reeks wordt afgekapt zodra het volgende adres niet aansluit, of
+    zodra `max_batch` registers bereikt is.
+    """
+    if not specs:
+        return []
+    runs: list[list[tuple]] = []
+    current = [specs[0]]
+    for spec in specs[1:]:
+        prev_address = current[-1][0]
+        address = spec[0]
+        if address == prev_address + 1 and len(current) < max_batch:
+            current.append(spec)
+        else:
+            runs.append(current)
+            current = [spec]
+    runs.append(current)
+    return runs
+
+
+# Eenmalig (bij import) berekend — de registerlijsten in const.py zijn statisch.
+_SENSOR_RUNS = _contiguous_runs(SENSOR_REGISTERS)
+_NUMBER_RUNS = _contiguous_runs(NUMBER_REGISTERS)
 
 
 class NextCoordinator(DataUpdateCoordinator):
@@ -64,6 +114,9 @@ class NextCoordinator(DataUpdateCoordinator):
         # "antwoord komt één stap te laat"-mismatch te kunnen herkennen.
         self._last_read_address: int | None = None
         self._last_read_value: int | None = None
+        # Aantal opeenvolgende volledig mislukte registers/batches — de
+        # circuit breaker voor busbezetting (zie _register_failure).
+        self._consecutive_failures = 0
         self.refrigerant_type: int | None = None
         self.refrigerant_name: str = "Unknown"
         self.temperature_scale: float = 1.0  # default R32
@@ -86,6 +139,34 @@ class NextCoordinator(DataUpdateCoordinator):
             )
             self._client.connect()
         return self._client
+
+    def _sleep_request_delay(self) -> None:
+        time.sleep(REQUEST_DELAY + random.uniform(0, REQUEST_DELAY_JITTER))
+
+    def _register_success(self) -> None:
+        """Reset de mislukking-op-rij-teller na een geslaagde lezing."""
+        self._consecutive_failures = 0
+
+    def _register_failure(self) -> None:
+        """Hoog de mislukking-op-rij-teller op en pauzeer indien nodig.
+
+        Wordt aangeroepen wanneer een register (via _read_one) of een hele
+        batch (via _read_range) uiteindelijk niets bruikbaars opleverde.
+        Bij CONSECUTIVE_FAILURE_THRESHOLD op rij nemen we aan dat de bus
+        momenteel bezet is door een andere master en pauzeren we even, in
+        plaats van door te blijven rammen met reconnects.
+        """
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= CONSECUTIVE_FAILURE_THRESHOLD:
+            _LOGGER.warning(
+                "%d opeenvolgende mislukte lezingen — de RS485-bus lijkt "
+                "momenteel bezet (bijv. door een andere Modbus-master zoals "
+                "een display via de splitter). Pauzeer %.0fs voordat er "
+                "verder wordt gepolld.",
+                self._consecutive_failures, BURST_COOLDOWN,
+            )
+            time.sleep(BURST_COOLDOWN)
+            self._consecutive_failures = 0
 
     def _read_one(
         self,
@@ -110,7 +191,7 @@ class NextCoordinator(DataUpdateCoordinator):
         """
         last_err: Exception | None = None
         for attempt in range(1, attempts + 1):
-            time.sleep(REQUEST_DELAY)
+            self._sleep_request_delay()
             try:
                 with self._lock:
                     client = self._get_client()
@@ -152,6 +233,7 @@ class NextCoordinator(DataUpdateCoordinator):
                 # Alleen bijhouden bij een geslaagde, plausibele read
                 self._last_read_address = address
                 self._last_read_value = value
+                self._register_success()
                 return value
             except Exception as err:
                 last_err = err
@@ -167,7 +249,102 @@ class NextCoordinator(DataUpdateCoordinator):
                 "Gaf op na %d pogingen voor register 0x%04X: %s — reconnecting",
                 attempts, address, last_err,
             )
+        self._register_failure()
         return None
+
+    def _read_range(
+        self,
+        start_address: int,
+        count: int,
+        attempts: int = READ_ATTEMPTS,
+    ) -> list[int] | None:
+        """Lees `count` aaneengesloten holding registers in één Modbus-call.
+
+        Zelfde retry-/reconnect-gedrag als _read_one, maar dan voor een heel
+        blok registers tegelijk — dit scheelt round trips (en dus tijd op de
+        gedeelde RS485-bus) t.o.v. één call per register. Geeft bij succes
+        een lijst met `count` ruwe (unsigned) waarden terug, of None als het
+        hele blok na `attempts` pogingen nog steeds mislukt.
+
+        Plausibiliteitscontrole (min_val/max_val) gebeurt hier bewust niet —
+        dat blijft aan de aanroeper, die voor een enkel afwijkend register
+        binnen de batch een gerichte her-lezing via _read_one kan doen i.p.v.
+        meteen de hele batch af te keuren.
+        """
+        last_err: Exception | None = None
+        end_address = start_address + count - 1
+        for attempt in range(1, attempts + 1):
+            self._sleep_request_delay()
+            try:
+                with self._lock:
+                    client = self._get_client()
+                    result = client.read_holding_registers(
+                        address=start_address, count=count, device_id=self.slave
+                    )
+                if hasattr(result, 'isError') and result.isError():
+                    _LOGGER.warning(
+                        "Error reading range 0x%04X..0x%04X (attempt %d/%d)",
+                        start_address, end_address, attempt, attempts,
+                    )
+                    continue
+
+                values = list(result.registers)
+                self._register_success()
+                return values
+            except Exception as err:
+                last_err = err
+                _LOGGER.warning(
+                    "Exception reading range 0x%04X..0x%04X (attempt %d/%d): %s",
+                    start_address, end_address, attempt, attempts, err,
+                )
+                with self._lock:
+                    self._client = None
+
+        if last_err is not None:
+            _LOGGER.warning(
+                "Gaf op na %d pogingen voor bereik 0x%04X..0x%04X: %s — reconnecting",
+                attempts, start_address, end_address, last_err,
+            )
+        self._register_failure()
+        return None
+
+    def _apply_scale(self, spec: tuple, raw: int | None):
+        """Pas signed-conversie en schaling toe, zoals voorheen in _fetch_all."""
+        address, name, unit, device_class, scale, signed, min_val, max_val = spec
+        if raw is None:
+            return None
+        value = _to_signed(raw) if signed else raw
+        effective_scale = self.temperature_scale if device_class == TEMPERATURE_DEVICE_CLASS else scale
+        return round(value * effective_scale, 1) if effective_scale != 1 else value
+
+    def _read_sensor_run(self, run: list[tuple], data: dict) -> None:
+        """Lees één aaneengesloten reeks SENSOR_REGISTERS in één batch-call
+        en vul `data` met de verwerkte waarden. Registers die buiten hun
+        min/max-bereik vallen worden individueel opnieuw gelezen (zelfde
+        vangnet als voorheen), zonder de hele batch te herhalen.
+        """
+        start = run[0][0]
+        values = self._read_range(start, len(run))
+        for i, spec in enumerate(run):
+            address, name, unit, device_class, scale, signed, min_val, max_val = spec
+            raw = values[i] if values is not None else None
+
+            if raw is not None and min_val is not None and max_val is not None:
+                signed_check = _to_signed(raw)
+                if not (min_val <= signed_check <= max_val):
+                    self._implausible_count += 1
+                    _LOGGER.warning(
+                        "Implausibele waarde %d (verwacht %d..%d) voor register "
+                        "0x%04X binnen batch 0x%04X..0x%04X — losse her-lezing",
+                        signed_check, min_val, max_val, address,
+                        start, start + len(run) - 1,
+                    )
+                    raw = self._read_one(address, min_val=min_val, max_val=max_val)
+                else:
+                    self._last_read_address = address
+                    self._last_read_value = raw
+
+            data[name] = self._apply_scale(spec, raw)
 
     def _detect_refrigerant(self) -> None:
         """Lees P119 (0x0177) en stel temperatuurschaling in.
@@ -206,6 +383,9 @@ class NextCoordinator(DataUpdateCoordinator):
         data: dict = {}
         # Reset de teller voor implausibele waarden aan het begin van elke cyclus.
         self._implausible_count = 0
+        # Bewust NIET self._consecutive_failures resetten aan het begin van de
+        # cyclus — een busbotsing kan precies op de overgang tussen twee
+        # cycli vallen, en dan willen we die telling laten doorlopen.
         try:
             # ── Eénmalig: koelmiddeltype detecteren ──
             if self.refrigerant_type is None:
@@ -219,19 +399,10 @@ class NextCoordinator(DataUpdateCoordinator):
             raw = self._read_one(0x0027)
             data["Compressor Target Frequency"] = raw
 
-            # ── Sensor registers ──
-            for address, name, unit, device_class, scale, signed, min_val, max_val in SENSOR_REGISTERS:
-                raw = self._read_one(address, min_val=min_val, max_val=max_val)
-                if raw is None:
-                    data[name] = None
-                else:
-                    value = _to_signed(raw) if signed else raw
-                    # Temperatuurregisters: schaling uit P119
-                    if device_class == TEMPERATURE_DEVICE_CLASS:
-                        effective_scale = self.temperature_scale
-                    else:
-                        effective_scale = scale
-                    data[name] = round(value * effective_scale, 1) if effective_scale != 1 else value
+            # ── Sensor registers — in aaneengesloten batches i.p.v. één
+            #    Modbus-call per register (zie _SENSOR_RUNS hierboven) ──
+            for run in _SENSOR_RUNS:
+                self._read_sensor_run(run, data)
 
             # ── Energy register (single 16-bit, value directly in kWh) ──
             raw = self._read_one(ENERGY_REGISTER)
@@ -242,10 +413,22 @@ class NextCoordinator(DataUpdateCoordinator):
             for mask, bit_name in STATUS_BITS:
                 data[bit_name] = bool(raw_status & mask) if raw_status is not None else None
 
-            # ── Number registers (control register area) ──
-            for address, name, unit, device_class, mn, mx, step in NUMBER_REGISTERS:
-                raw = self._read_one(address, min_val=mn, max_val=mx)
-                data[name] = _to_signed(raw) if raw is not None else None
+            # ── Number registers (control register area) — ook gebatcht ──
+            for run in _NUMBER_RUNS:
+                start = run[0][0]
+                values = self._read_range(start, len(run))
+                for i, (address, name, unit, device_class, mn, mx, step) in enumerate(run):
+                    raw = values[i] if values is not None else None
+                    if raw is not None:
+                        signed_check = _to_signed(raw)
+                        if not (mn <= signed_check <= mx):
+                            _LOGGER.warning(
+                                "Implausibele waarde %d (verwacht %d..%d) voor "
+                                "number-register 0x%04X binnen batch — losse "
+                                "her-lezing", signed_check, mn, mx, address,
+                            )
+                            raw = self._read_one(address, min_val=mn, max_val=mx)
+                    data[name] = _to_signed(raw) if raw is not None else None
 
             # ── Switch register ──
             raw = self._read_one(SWITCH_REGISTER)
@@ -282,7 +465,7 @@ class NextCoordinator(DataUpdateCoordinator):
 
     def write_register(self, address: int, value: int) -> bool:
         """Write a single holding register."""
-        time.sleep(REQUEST_DELAY)
+        self._sleep_request_delay()
         with self._lock:
             try:
                 client = self._get_client()

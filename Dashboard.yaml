@@ -1,4 +1,4 @@
-
+title: Warmtepomp
 views:
   - title: Overzicht
     path: overzicht
@@ -15,6 +15,68 @@ views:
             name: In bedrijf
           - entity: binary_sensor.running_status_fault_alarm
             name: Storing
+          - entity: sensor.water_outlet_temp_t7
+            name: Actuele temp. uitgaand (T7)
+      - type: markdown
+        content: |
+          {% set mode = states('select.mode') %} {% if mode == 'Cooling' %}
+            **Ingestelde temp. (Koelen):** {{ states('number.temp_set_cooling') }} °C
+          {% elif mode == 'Heating' %}
+            **Ingestelde temp. (Verwarmen):** {{ states('number.temp_set_heating') }} °C
+          {% elif mode == 'Hot Water' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+          {% elif mode == 'Floor Heating' %}
+            **Ingestelde temp. (Vloerverwarming):** {{ states('number.temp_set_floor_heating') }} °C
+          {% elif mode == 'Hot Water + Cooling' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+            **Ingestelde temp. (Koelen):** {{ states('number.temp_set_cooling') }} °C
+          {% elif mode == 'Hot Water + Heating' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+            **Ingestelde temp. (Verwarmen):** {{ states('number.temp_set_heating') }} °C
+          {% elif mode == 'Hot Water + Floor Heating' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+            **Ingestelde temp. (Vloerverwarming):** {{ states('number.temp_set_floor_heating') }} °C
+          {% else %}
+            **Ingestelde temp.:** onbekende modus ({{ mode }})
+          {% endif %}
+        title: Instelling temperatuur
+      - square: true
+        type: grid
+        title: 'Temperaturen '
+        columns: 2
+        cards:
+          - type: gauge
+            entity: sensor.water_outlet_temp_t7
+            name: Water uit
+            min: 0
+            max: 70
+            needle: true
+            severity:
+              green: 0
+              yellow: 40
+              red: 60
+          - type: gauge
+            entity: sensor.water_inlet_temp_t6
+            name: Water in
+            min: 0
+            needle: true
+            severity:
+              green: 0
+              yellow: 40
+              red: 60
+            max: 70
+          - type: gauge
+            entity: sensor.dhw_tank_temp
+            name: Boiler (DHW)
+            min: 0
+            max: 70
+            needle: true
+          - type: gauge
+            entity: sensor.ambient_temp_t1
+            name: Buitentemp.
+            min: -20
+            max: 40
+            needle: true
       - type: glance
         title: Kerncijfers
         columns: 3
@@ -25,17 +87,6 @@ views:
             name: Thermisch vermogen
           - entity: sensor.unit_power_consumption
             name: Verbruik
-      - type: entities
-        title: Temperaturen kort
-        entities:
-          - entity: sensor.ambient_temp_t1
-            name: Buitentemp.
-          - entity: sensor.water_outlet_temp_t7
-            name: Water uit
-          - entity: sensor.water_inlet_temp_t6
-            name: Water in
-          - entity: sensor.dhw_tank_temp
-            name: Boiler (DHW)
       - type: history-graph
         title: Vermogen laatste 24u
         hours_to_show: 24
@@ -55,20 +106,24 @@ views:
       - type: entities
         title: Energie vandaag
         entities:
-          - entity: sensor.energieverbruik_warmtepomp
+          - entity: sensor.energieverbruik_warmtepomp_2
             name: Verbruik (elektrisch)
           - entity: sensor.thermische_energie_warmtepomp
             name: Opbrengst (thermisch)
       - type: statistics-graph
-        title: Energieverbruik & -opbrengst (7 dagen)
         entities:
-          - sensor.energieverbruik_warmtepomp
+          - entity: sensor.unit_power_consumption
           - sensor.thermische_energie_warmtepomp
-        stat_types:
-          - sum
+        title: Energieverbruik & -opbrengst (7 dagen)
         days_to_show: 7
         period: day
         chart_type: bar
+        stat_types:
+          - sum
+        unit: kWh
+        expand_legend: true
+    type: masonry
+    show_icon_and_title: true
   - title: Temperaturen
     path: temperaturen
     icon: mdi:thermometer
@@ -102,6 +157,8 @@ views:
           - sensor.water_inlet_temp_t6
           - sensor.water_outlet_temp_t7
           - sensor.dhw_tank_temp
+    type: masonry
+    show_icon_and_title: true
   - title: Elektrisch & Vermogen
     path: elektrisch
     icon: mdi:flash
@@ -135,6 +192,8 @@ views:
         entities:
           - sensor.unit_input_current
           - sensor.unit_power_consumption
+    type: masonry
+    show_icon_and_title: true
   - title: Bediening
     path: bediening
     icon: mdi:tune
@@ -159,6 +218,8 @@ views:
           - select.heating_setting_curve
           - select.hot_water_setting_curve
           - select.underfloor_heating_setting_curve
+    type: masonry
+    show_icon_and_title: true
   - title: Diagnostiek
     path: diagnostiek
     icon: mdi:wrench-cog
@@ -174,6 +235,89 @@ views:
       - type: entities
         title: Overig
         entities:
-          - sensor.refrigerant_type
-          - binary_sensor.running_status_fault_alarm
-          - binary_sensor.running_status_unit_operation
+          - entity: sensor.refrigerant_type
+          - entity: binary_sensor.running_status_fault_alarm
+          - entity: sensor.unit_power_consumption
+    type: masonry
+    show_icon_and_title: true
+  - title: Storingen
+    path: storingen
+    icon: mdi:alert-circle
+    cards:
+      - type: entities
+        title: Storingsoverzicht
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.running_status_fault_alarm
+            name: Algemene storing
+          - entity: binary_sensor.running_status_unit_operation
+            name: In bedrijf
+      - type: entities
+        title: Elektrisch & Communicatie
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.error_wrong_phase
+            name: Verkeerde fase
+          - entity: binary_sensor.error_missing_phase
+            name: Fase ontbreekt
+          - entity: binary_sensor.error_communication_failure
+            name: Communicatiefout
+      - type: entities
+        title: Water   sensoren
+        show_header_toggle: true
+        entities:
+          - entity: binary_sensor.error_water_flow_failure
+            name: Waterdoorstroming mislukt
+            color: purple
+          - entity: binary_sensor.error_low_water_flow
+            name: Lage waterdoorstroming
+          - entity: binary_sensor.error_water_pump_1_failure
+            name: Waterpomp 1 defect
+          - entity: binary_sensor.error_water_pump_2_failure
+            name: Waterpomp 2 defect
+          - entity: binary_sensor.error_water_tank_temp_sensor_failure
+            name: Watertank sensorfout
+          - entity: binary_sensor.error_water_inlet_temp_sensor_failure
+            name: Water-inlaat sensorfout
+          - entity: binary_sensor.error_water_outlet_temp_sensor_failure
+            name: Water-uitlaat sensorfout
+          - entity: binary_sensor.error_water_outlet_temp_too_high_in_heating_mode
+            name: Uitlaattemp. te hoog (verwarmen)
+          - entity: binary_sensor.error_large_temp_difference_water_inlet_outlet
+            name: Groot verschil in/uitlaat temp.
+        color: pink
+      - type: entities
+        entities:
+          - entity: binary_sensor.running_status_fault_alarm
+            color: red
+            icon: mdi:alpha-o-circle-outline
+          - entity: binary_sensor.running_status_primary_anti_freeze
+          - entity: binary_sensor.running_status_refrigerant_recovery
+          - entity: binary_sensor.running_status_secondary_anti_freeze
+          - entity: binary_sensor.running_status_system_frosting
+          - entity: binary_sensor.running_status_unit_operation
+          - entity: binary_sensor.running_status_system_oil_return
+          - entity: binary_sensor.running_status_shutdown_after_reaching_temp
+          - entity: binary_sensor.running_status_shutdown_after_unit_failure
+          - entity: binary_sensor.running_status_unit_waiting_for_operation
+        title: Status sensoren
+        color: red
+        show_header_toggle: true
+      - type: entities
+        title: Druk & compressor
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.error_high_pressure_switch_failure
+            name: Hogedrukschakelaar defect
+          - entity: binary_sensor.error_low_pressure_switch_failure
+            name: Lagedrukschakelaar defect
+          - entity: binary_sensor.error_high_pressure_too_high
+            name: Hoge druk te hoog
+          - entity: binary_sensor.error_exhaust_pressure_too_high
+            name: Persdruk te hoog
+          - entity: binary_sensor.error_fan_failure
+            name: Ventilator defect
+          - entity: binary_sensor.error_ambient_temp_too_low
+            name: Omgevingstemp. te laag
+    type: masonry
+    show_icon_and_title: true

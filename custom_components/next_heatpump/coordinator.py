@@ -14,8 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .const import (
     DOMAIN,
     SENSOR_REGISTERS,
-    STATUS_REGISTER,
-    STATUS_BITS,
+    STATUS_REGISTERS,
     NUMBER_REGISTERS,
     SWITCH_REGISTER,
     SELECT_REGISTERS,
@@ -289,6 +288,22 @@ class NextCoordinator(DataUpdateCoordinator):
                     continue
 
                 values = list(result.registers)
+                if len(values) != count:
+                    # Sommige RTU-TCP gateways/RS485-hubs leveren bij een
+                    # verstoorde bustransactie een te kort of te lang
+                    # antwoord op zonder dat pymodbus dat als isError()
+                    # markeert. Zonder deze check zou de aanroeper met
+                    # values[i] buiten de lijst indexeren (IndexError) en
+                    # de hele pollcyclus laten crashen — behandel dit dus
+                    # als een mislukte poging, net als een echte fout.
+                    _LOGGER.warning(
+                        "Onvolledig antwoord voor bereik 0x%04X..0x%04X: "
+                        "%d register(s) verwacht, %d ontvangen (attempt %d/%d)",
+                        start_address, end_address, count, len(values),
+                        attempt, attempts,
+                    )
+                    continue
+
                 self._register_success()
                 return values
             except Exception as err:
@@ -327,7 +342,10 @@ class NextCoordinator(DataUpdateCoordinator):
         values = self._read_range(start, len(run))
         for i, spec in enumerate(run):
             address, name, unit, device_class, scale, signed, min_val, max_val = spec
-            raw = values[i] if values is not None else None
+            # Defensieve bound-check: _read_range garandeert inmiddels zelf al
+            # len(values) == len(run) bij succes, maar dit voorkomt dat een
+            # toekomstige wijziging hier alsnog een IndexError laat ontstaan.
+            raw = values[i] if values is not None and i < len(values) else None
 
             if raw is not None and min_val is not None and max_val is not None:
                 signed_check = _to_signed(raw)
@@ -408,17 +426,23 @@ class NextCoordinator(DataUpdateCoordinator):
             raw = self._read_one(ENERGY_REGISTER)
             data["Unit Power Consumption"] = float(raw) if raw is not None else None
 
-            # ── Status bitmask ──
-            raw_status = self._read_one(STATUS_REGISTER)
-            for mask, bit_name in STATUS_BITS:
-                data[bit_name] = bool(raw_status & mask) if raw_status is not None else None
+            # ── Status-/foutregisters — meerdere bitmask-registers ──
+            # STATUS_REGISTERS bundelt (register_adres, bits_lijst)-paren:
+            # het "Running Status"-register (0x0000) plus de losse
+            # foutregisters (Error Status 1/2, System1 Error Status 1).
+            # Elk register wordt apart uitgelezen; de bits erin worden
+            # gedecodeerd tot de bijbehorende binary_sensor-entiteiten.
+            for reg_address, bits in STATUS_REGISTERS:
+                raw_status = self._read_one(reg_address)
+                for mask, bit_name in bits:
+                    data[bit_name] = bool(raw_status & mask) if raw_status is not None else None
 
             # ── Number registers (control register area) — ook gebatcht ──
             for run in _NUMBER_RUNS:
                 start = run[0][0]
                 values = self._read_range(start, len(run))
                 for i, (address, name, unit, device_class, mn, mx, step) in enumerate(run):
-                    raw = values[i] if values is not None else None
+                    raw = values[i] if values is not None and i < len(values) else None
                     if raw is not None:
                         signed_check = _to_signed(raw)
                         if not (mn <= signed_check <= mx):

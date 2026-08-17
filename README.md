@@ -23,12 +23,14 @@ This integration was developed and tested with the following hardware NOT WORKIN
 <img width="300" height="250" alt="Naamloos" src="https://github.com/user-attachments/assets/f37784bc-e5b3-4190-a267-d83e73a5b944" />
 
 
-- **E810-R21 Ebyte** RS485 splitter (2 master / 1 slave):
+- **E810-R21 Ebyte** RS485 splitter (2 master / 1 slave): 
   - **Slave port** → Modbus RS485 cable from the heat pump
   - **Master 1** → Display original controller
   - **Master 2** → Elfin EW11A (RS485 to WiFi/TCP bridge)
 - The **Elfin EW11A** configured as TCP Server on port **502**
 - Modbus slave ID of the heat pump: **1** (default)
+
+[E810-Rx1+User+Manual_EN_v1.0.pdf](https://github.com/user-attachments/files/31154340/E810-Rx1%2BUser%2BManual_EN_v1.0.pdf)
 
 Any RS485-to-Modbus-TCP bridge should work (Elfin, USR-W610, etc.).
 

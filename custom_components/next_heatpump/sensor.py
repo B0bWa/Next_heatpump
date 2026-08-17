@@ -31,7 +31,7 @@ async def async_setup_entry(
 
     entities = [
         NextSensor(coordinator, address, name, unit, device_class)
-        for address, name, unit, device_class, scale, signed in SENSOR_REGISTERS
+        for address, name, unit, device_class, scale, signed, min_val, max_val in SENSOR_REGISTERS
     ]
     # Energy: state_class=TOTAL zodat HA dalingen (bijv. na reset) correct afhandelt
     entities.append(NextEnergySensor(coordinator))

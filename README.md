@@ -46,13 +46,15 @@ Any RS485-to-Modbus-TCP bridge should work (Elfin, USR-W610, etc.).
 - Parity: `None`
 - Buffer Size: `1024`
 - Gap Time: `100`
-- 
+- <img width="1431" height="1466" alt="{E7B4D0CA-61EF-42FF-AC66-2C990CC92447}" src="https://github.com/user-attachments/assets/2c12cfb9-5e27-4f42-8286-12312379f9bc" />
+
 
 **Communication Settings:**
 - Protocol: `TCP Server`
 - Local Port: `502`
 - max 1 connection allowed
 ---
+<img width="1408" height="1542" alt="{DDE042DB-5CA4-4184-A9F6-3280C5142FAC}" src="https://github.com/user-attachments/assets/6f7f7b44-7773-4fa5-8663-0195a624c6b8" />
 
 ## Installation
 

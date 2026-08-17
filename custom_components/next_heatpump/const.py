@@ -73,16 +73,65 @@ SENSOR_REGISTERS = [
 # Running status register (bitmask sensors)
 STATUS_REGISTER = 0x0000
 STATUS_BITS = [
-#    (0x0001, "Running Status: Refrigerant Recovery"),
-#    (0x0002, "Running Status: Primary Anti-freeze"),
-#    (0x0004, "Running Status: Secondary Anti-freeze"),
-     (0x0008, "Running Status: Fault Alarm"),
-#    (0x0010, "Running Status: System Oil Return"),
-#    (0x0100, "Running Status: System Frosting"),
-#    (0x1000, "Running Status: Shutdown after Reaching Temp."),
-#    (0x2000, "Running Status: Shutdown after Unit Failure"),
-     (0x4000, "Running Status: Unit Operation"),
-#    (0x8000, "Running Status: Unit Waiting for Operation"),
+    (0x0001, "Running Status: Refrigerant Recovery"),
+    (0x0002, "Running Status: Primary Anti-freeze"),
+    (0x0004, "Running Status: Secondary Anti-freeze"),
+    (0x0008, "Running Status: Fault Alarm"),
+    (0x0010, "Running Status: System Oil Return"),
+    (0x0100, "Running Status: System Frosting"),
+    (0x1000, "Running Status: Shutdown after Reaching Temp."),
+    (0x2000, "Running Status: Shutdown after Unit Failure"),
+    (0x4000, "Running Status: Unit Operation"),
+    (0x8000, "Running Status: Unit Waiting for Operation"),
+]
+
+# ─────────────────────────────────────────────
+# Foutregisters — compacte selectie uit handleiding hfst. 4.2 (Error Code)
+# Elk register is een aparte 16-bit bitmask, net als STATUS_REGISTER hierboven.
+# Alleen de meest relevante bits voor een thuisgebruiker zijn geselecteerd;
+# zie de handleiding voor het volledige overzicht (o.a. System 1 Error Status 2/3
+# en de driver-board P-codes, die hier bewust zijn weggelaten).
+# ─────────────────────────────────────────────
+
+ERROR_STATUS_1_REGISTER = 0x0002
+ERROR_STATUS_1_BITS = [
+    (0x0001, "Error: Wrong Phase"),
+    (0x0002, "Error: Missing Phase"),
+    (0x0004, "Error: Water Flow Failure"),
+    (0x0008, "Error: Communication Failure"),
+    (0x0040, "Error: Water Tank Temp. Sensor Failure"),
+    (0x0080, "Error: Water Inlet Temp. Sensor Failure"),
+    (0x2000, "Error: Water Outlet Temp. Sensor Failure"),
+    (0x4000, "Error: Water Outlet Temp. Too High in Heating Mode"),
+    (0x8000, "Error: Large Temp. Difference Water Inlet/Outlet"),
+]
+
+ERROR_STATUS_2_REGISTER = 0x0003
+ERROR_STATUS_2_BITS = [
+    (0x0001, "Error: Ambient Temp. Too Low"),
+    (0x2000, "Error: Water Pump 1 Failure"),
+    (0x4000, "Error: Water Pump 2 Failure"),
+    (0x8000, "Error: Low Water Flow"),
+]
+
+SYSTEM1_ERROR_STATUS_1_REGISTER = 0x0005
+SYSTEM1_ERROR_STATUS_1_BITS = [
+    (0x0001, "Error: High Pressure Switch Failure"),
+    (0x0002, "Error: Low Pressure Switch Failure"),
+    (0x0004, "Error: High Pressure Too High"),
+    (0x0010, "Error: Exhaust Pressure Too High"),
+    (0x2000, "Error: Fan Failure"),
+]
+
+# Alle statusregisters gebundeld: (register_adres, bits_lijst).
+# coordinator.py en binary_sensor.py itereren hierover in plaats van het
+# losse STATUS_REGISTER/STATUS_BITS-paar, zodat elk register los wordt
+# uitgelezen en de bits erin correct worden gedecodeerd.
+STATUS_REGISTERS = [
+    (STATUS_REGISTER, STATUS_BITS),
+    (ERROR_STATUS_1_REGISTER, ERROR_STATUS_1_BITS),
+    (ERROR_STATUS_2_REGISTER, ERROR_STATUS_2_BITS),
+    (SYSTEM1_ERROR_STATUS_1_REGISTER, SYSTEM1_ERROR_STATUS_1_BITS),
 ]
 
 # Energy register: enkel 16-bit register, waarde direct in kWh (geen schaling)
@@ -149,4 +198,4 @@ def get_temperature_scale(refrigerant_type: int) -> float:
     """Bepaal Temperatuurschaling op basis van koelmiddeltype.
     R290 gebruikt ook 1, alle andere ×1.
     """
-    return 1 if refrigerant_type == 3 else 1.0"""Constants for Next Heatpump integration."""
+    return 1 if refrigerant_type == 3 else 1.0

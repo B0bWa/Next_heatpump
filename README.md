@@ -42,7 +42,7 @@ Any RS485-to-Modbus-TCP bridge should work (Elfin, USR-W610, etc.).
 - Data Bit: `8`
 - Stop Bit: `1`
 - Parity: `None`
-- Buffer Size: `512`
+- Buffer Size: `1024`
 - Gap Time: `100`
 - 
 
@@ -76,7 +76,7 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
    - **IP address** of your RS485-TCP gateway
    - **Port** (default `502`)
    - **Slave ID** (default `1`)
-   - **Scan interval** in seconds (default `30`)
+   - **Scan interval** in seconds (default `45`)
 
 ---
 
@@ -156,7 +156,7 @@ The following registers always return 0 on the R32 model and are excluded:
 - `0x0047` Compressor IPM Temperature
 
 ### Scan interval
-The default scan interval is 30 seconds. With ~40 registers × 200ms delay = ~8 seconds per poll cycle, a minimum of 30 seconds is recommended.
+The default scan interval is 45 seconds. With ~40 registers × 200ms delay = ~8 seconds per poll cycle, a minimum of 30 seconds is recommended.
 
 ---
 

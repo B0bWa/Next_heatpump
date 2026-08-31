@@ -13,7 +13,8 @@ This software is a fork of the Adlar Aurora II repository as developed by https:
 
 ## Hardware setup
 
-This integration was developed and tested with the following hardware NOT WORKING YET, only Ha sole one connection directly no display or Waveshare attached!!: The Waveshare is 1 master 2 slave device. not working at all. ordered E810-r21 instead. NOT WORKING at all because of timing problems. So this repository only works properly when attached in stead of display! 
+This integration was developed and tested with the following hardware NOT WORKING YET, only Ha only one connection directly no display or Waveshare attached!!: The Waveshare is 1 master 2 slave device. not working at all. ordered E810-r21 instead. NOT WORKING at all because of timing problems. So this repository only works properly when attached instead of display! 
+
 <img width="300" height="250" alt="display" src="https://github.com/user-attachments/assets/20c5453a-56c3-44a9-8a18-39b98387c47c" />
 
 <img width="300" height="250" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />

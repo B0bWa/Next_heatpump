@@ -81,6 +81,9 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
    - **Scan interval** in seconds (default `45`)
 
 ---
+** Schema normal/ eco modus
+
+Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (backend) en de bijbehorende scheduler-card (frontend). Omdat de kaart niet vanzelf weet welke opties jouw select.running_mode heeft, geeft het tweede bestand die koppeling mee ("Standard Mode" → Normaal, "Eco" → Eco/Silent). Daarna maak je de twee tijdsblokken (08:00 → Normaal, 22:00 → Eco) rechtstreeks in de kaart zelf aan — geen YAML meer nodig voor het schema, en volledig tikbaar/aanpasbaar vanaf het dashboard.
 
 ## Entities created
 

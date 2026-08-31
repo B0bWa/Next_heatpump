@@ -22,6 +22,14 @@ from .const import (
     REFRIGERANT_REGISTER,
     REFRIGERANT_TYPES,
     get_temperature_scale,
+    FORCE_CONTROL_REGISTER,
+    FORCE_CONTROL_BITS,
+    FORCE_VALUE_REGISTERS,
+    SILENT_MODE_REGISTERS,
+    ELECTRIC_HEATER_REGISTERS,
+    VERSION_INFO_START_REGISTER,
+    PRODUCT_TYPE_MAP,
+    PRODUCT_TYPE_ID_MAP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,7 +95,19 @@ def _contiguous_runs(specs: list[tuple], max_batch: int = MAX_BATCH_SIZE) -> lis
 
 # Eenmalig (bij import) berekend — de registerlijsten in const.py zijn statisch.
 _SENSOR_RUNS = _contiguous_runs(SENSOR_REGISTERS)
-_NUMBER_RUNS = _contiguous_runs(NUMBER_REGISTERS)
+# SILENT_MODE_REGISTERS (0x0158/0x0159), ELECTRIC_HEATER_REGISTERS (0x0116)
+# en FORCE_VALUE_REGISTERS (0x0332, 0x033E) meelezen via dezelfde
+# batchlogica als de gewone setpoints — geen van deze sluit aan op
+# 0x0300-0x0303, dus _contiguous_runs geeft ze automatisch hun eigen
+# (enkelvoudige of gekoppelde) batch(es). Op adres gesorteerd toegevoegd,
+# puur voor leesbaarheid — de batchlogica zelf werkt ook prima met een
+# ongesorteerde lijst.
+_NUMBER_RUNS = _contiguous_runs(
+    ELECTRIC_HEATER_REGISTERS
+    + SILENT_MODE_REGISTERS
+    + NUMBER_REGISTERS
+    + FORCE_VALUE_REGISTERS
+)
 
 
 class NextCoordinator(DataUpdateCoordinator):
@@ -426,6 +446,43 @@ class NextCoordinator(DataUpdateCoordinator):
             raw = self._read_one(ENERGY_REGISTER)
             data["Unit Power Consumption"] = float(raw) if raw is not None else None
 
+            # ── Version Information 0x0360~0x0363 (aaneengesloten batch) ──
+            # Program Version, Product Type, Product Type ID Number, Protocol
+            # Version — allemaal read-only, statisch (verandert alleen bij een
+            # firmware-update). Zie const.py voor de uitleg van de mapping/
+            # formattering, inclusief een gevlagde inconsistentie in de manual.
+            version_values = self._read_range(VERSION_INFO_START_REGISTER, 4)
+            if version_values is not None:
+                prog_ver_raw, prod_type_raw, prod_type_id_raw, proto_ver_raw = version_values
+            else:
+                prog_ver_raw = prod_type_raw = prod_type_id_raw = proto_ver_raw = None
+
+            def _format_version(raw_val: int | None) -> str | None:
+                if raw_val is None:
+                    return None
+                return f"V{raw_val // 100}.{raw_val % 100:02d}"
+
+            data["Program Version"] = _format_version(prog_ver_raw)
+            data["Program Version Raw"] = prog_ver_raw
+            data["Protocol Version"] = _format_version(proto_ver_raw)
+            data["Protocol Version Raw"] = proto_ver_raw
+
+            data["Product Type Raw"] = prod_type_raw
+            data["Product Type"] = (
+                PRODUCT_TYPE_MAP.get(prod_type_raw, f"Unknown ({prod_type_raw})")
+                if prod_type_raw is not None else None
+            )
+
+            data["Product Type ID Number Raw"] = prod_type_id_raw
+            if prod_type_raw is not None and prod_type_id_raw is not None:
+                id_map = PRODUCT_TYPE_ID_MAP.get(prod_type_raw, {})
+                data["Product Type ID Number"] = id_map.get(
+                    prod_type_id_raw,
+                    f"Unknown (type={prod_type_raw}, id={prod_type_id_raw})",
+                )
+            else:
+                data["Product Type ID Number"] = None
+
             # ── Status-/foutregisters — meerdere bitmask-registers ──
             # STATUS_REGISTERS bundelt (register_adres, bits_lijst)-paren:
             # het "Running Status"-register (0x0000) plus de losse
@@ -436,6 +493,16 @@ class NextCoordinator(DataUpdateCoordinator):
                 raw_status = self._read_one(reg_address)
                 for mask, bit_name in bits:
                     data[bit_name] = bool(raw_status & mask) if raw_status is not None else None
+
+            # ── Load Forcing-bits (geforceerde besturing compressor/ventilator) ──
+            # Register 0x0331 — zie const.py voor uitleg. Alleen gebruikt om de
+            # switch-status te tonen; het schrijven zelf gaat via
+            # write_bit(), dat de registerwaarde vlak vóór het schrijven vers
+            # opnieuw leest (deze gecachte pollwaarde kan tot scan_interval
+            # seconden oud zijn).
+            raw_force = self._read_one(FORCE_CONTROL_REGISTER)
+            for mask, bit_name in FORCE_CONTROL_BITS:
+                data[bit_name] = bool(raw_force & mask) if raw_force is not None else None
 
             # ── Number registers (control register area) — ook gebatcht ──
             for run in _NUMBER_RUNS:
@@ -488,17 +555,70 @@ class NextCoordinator(DataUpdateCoordinator):
                     self._client = None
 
     def write_register(self, address: int, value: int) -> bool:
-        """Write a single holding register."""
+        """Write a single holding register.
+
+        Sommige registers (bijv. 0x0116, Electric Heater Allow Start Temp.,
+        bereik -15..40) hebben een negatief bereik. Modbus-holding-registers
+        zijn 16-bit unsigned op de draad; een negatieve Python-int maskeren
+        we daarom naar zijn 16-bit two's-complement-representatie
+        (bijv. -7 -> 0xFFF9) vóór verzending. Voor waarden die al
+        0..65535 zijn heeft dit geen effect.
+        """
         self._sleep_request_delay()
         with self._lock:
             try:
                 client = self._get_client()
                 result = client.write_register(
-                    address=address, value=value, device_id=self.slave
+                    address=address, value=value & 0xFFFF, device_id=self.slave
                 )
                 return not result.isError()
             except Exception as err:
                 _LOGGER.error("Write error at 0x%04X: %s", address, err)
+                self._client = None
+                return False
+            finally:
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None
+
+    def write_bit(self, register: int, mask: int, state: bool) -> bool:
+        """Zet of wist één bit in een bitmask-register (read-modify-write).
+
+        Gebruikt voor de Load Forcing-bits in register 0x0331: dat register
+        deelt één 16-bit waarde tussen meerdere onafhankelijke aan/uit-vlaggen
+        (compressor/EEV/EVI/ventilator forcering), dus een schrijfactie mag
+        nooit de andere bits overschrijven. Leest daarom eerst de actuele
+        registerwaarde vers uit — niet de gecachte pollwaarde uit
+        coordinator.data, die tot scan_interval seconden oud kan zijn — past
+        alleen het gevraagde bit aan, en schrijft het volledige register in
+        één atomaire stap terug.
+        """
+        self._sleep_request_delay()
+        with self._lock:
+            try:
+                client = self._get_client()
+                read_result = client.read_holding_registers(
+                    address=register, count=1, device_id=self.slave
+                )
+                if read_result.isError() or not read_result.registers:
+                    _LOGGER.error(
+                        "Kon register 0x%04X niet lezen voor bit-write (mask 0x%04X)",
+                        register, mask,
+                    )
+                    return False
+                current = read_result.registers[0]
+                new_value = (current | mask) if state else (current & ~mask & 0xFFFF)
+                write_result = client.write_register(
+                    address=register, value=new_value, device_id=self.slave
+                )
+                return not write_result.isError()
+            except Exception as err:
+                _LOGGER.error(
+                    "Bit-write fout op 0x%04X (mask 0x%04X): %s", register, mask, err
+                )
                 self._client = None
                 return False
             finally:

@@ -17,34 +17,24 @@ views:
             name: Storing
           - entity: sensor.water_outlet_temp_t7
             name: Actuele temp. uitgaand (T7)
-      - type: markdown
-        content: |
-          {% set mode = states('select.mode') %} {% if mode == 'Cooling' %}
-            **Ingestelde temp. (Koelen):** {{ states('number.temp_set_cooling') }} °C
-          {% elif mode == 'Heating' %}
-            **Ingestelde temp. (Verwarmen):** {{ states('number.temp_set_heating') }} °C
-          {% elif mode == 'Hot Water' %}
-            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
-          {% elif mode == 'Floor Heating' %}
-            **Ingestelde temp. (Vloerverwarming):** {{ states('number.temp_set_floor_heating') }} °C
-          {% elif mode == 'Hot Water + Cooling' %}
-            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
-            **Ingestelde temp. (Koelen):** {{ states('number.temp_set_cooling') }} °C
-          {% elif mode == 'Hot Water + Heating' %}
-            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
-            **Ingestelde temp. (Verwarmen):** {{ states('number.temp_set_heating') }} °C
-          {% elif mode == 'Hot Water + Floor Heating' %}
-            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
-            **Ingestelde temp. (Vloerverwarming):** {{ states('number.temp_set_floor_heating') }} °C
-          {% else %}
-            **Ingestelde temp.:** onbekende modus ({{ mode }})
-          {% endif %}
-        title: Instelling temperatuur
-      - square: true
+          - entity: sensor.program_version
+          - entity: sensor.protocol_version
+          - entity: sensor.refrigerant_type
+      - square: false
         type: grid
         title: 'Temperaturen '
         columns: 2
         cards:
+          - type: gauge
+            entity: sensor.warmtepomp_klimaat_setpoint
+            name: Temperatuur setpoint
+            needle: true
+            min: 0
+            max: 75
+            severity:
+              green: 20
+              yellow: 35
+              red: 50
           - type: gauge
             entity: sensor.water_outlet_temp_t7
             name: Water uit
@@ -66,16 +56,20 @@ views:
               red: 60
             max: 70
           - type: gauge
-            entity: sensor.dhw_tank_temp
-            name: Boiler (DHW)
-            min: 0
-            max: 70
-            needle: true
-          - type: gauge
             entity: sensor.ambient_temp_t1
             name: Buitentemp.
             min: -20
             max: 40
+            needle: true
+            severity:
+              green: 0
+              yellow: 25
+              red: 30
+          - type: gauge
+            entity: sensor.dhw_tank_temp
+            name: Boiler (DHW)
+            min: 0
+            max: 70
             needle: true
       - type: glance
         title: Kerncijfers
@@ -87,12 +81,6 @@ views:
             name: Thermisch vermogen
           - entity: sensor.unit_power_consumption
             name: Verbruik
-      - type: history-graph
-        title: Vermogen laatste 24u
-        hours_to_show: 24
-        entities:
-          - sensor.unit_power_consumption
-          - sensor.thermal_power
       - type: statistics-graph
         title: COP trend (7 dagen)
         entities:
@@ -103,6 +91,12 @@ views:
           - max
         days_to_show: 7
         period: day
+      - type: history-graph
+        title: Vermogen laatste 24u
+        hours_to_show: 24
+        entities:
+          - sensor.unit_power_consumption
+          - sensor.thermal_power
       - type: entities
         title: Energie vandaag
         entities:
@@ -157,6 +151,29 @@ views:
           - sensor.water_inlet_temp_t6
           - sensor.water_outlet_temp_t7
           - sensor.dhw_tank_temp
+      - type: markdown
+        content: |
+          {% set mode = states('select.mode') %} {% if mode == 'Cooling' %}
+            **Ingestelde temp. (Koelen):** {{ states('number.temp_set_cooling') }} °C
+          {% elif mode == 'Heating' %}
+            **Ingestelde temp. (Verwarmen):** {{ states('number.temp_set_heating') }} °C
+          {% elif mode == 'Hot Water' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+          {% elif mode == 'Floor Heating' %}
+            **Ingestelde temp. (Vloerverwarming):** {{ states('number.temp_set_floor_heating') }} °C
+          {% elif mode == 'Hot Water + Cooling' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+            **Ingestelde temp. (Koelen):** {{ states('number.temp_set_cooling') }} °C
+          {% elif mode == 'Hot Water + Heating' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+            **Ingestelde temp. (Verwarmen):** {{ states('number.temp_set_heating') }} °C
+          {% elif mode == 'Hot Water + Floor Heating' %}
+            **Ingestelde temp. (Warm water):** {{ states('number.temp_set_hot_water') }} °C
+            **Ingestelde temp. (Vloerverwarming):** {{ states('number.temp_set_floor_heating') }} °C
+          {% else %}
+            **Ingestelde temp.:** onbekende modus ({{ mode }})
+          {% endif %}
+        title: Ingestelde temperatuur
     type: masonry
     show_icon_and_title: true
   - title: Elektrisch & Vermogen
@@ -201,23 +218,29 @@ views:
       - type: entities
         title: Aan/uit & modus
         entities:
-          - switch.heatpump_on_off
-          - select.mode
-          - select.running_mode
+          - entity: switch.heatpump_on_off
+          - entity: select.running_mode
+          - entity: select.mode
       - type: entities
         title: Temperatuur instellingen
         entities:
-          - number.temp_set_cooling
-          - number.temp_set_heating
-          - number.temp_set_hot_water
-          - number.temp_set_floor_heating
+          - entity: number.temp_set_heating
+          - entity: number.temp_set_floor_heating
+          - entity: number.temp_set_cooling
+          - entity: number.temp_set_hot_water
+          - entity: number.silent_mode_compressor_max_frequency
+          - entity: number.silent_mode_fan_max_frequency
+          - entity: number.electric_heater_allow_start_temp
       - type: entities
         title: Stooklijnen (curves)
         entities:
-          - select.cooling_setting_curve
-          - select.heating_setting_curve
-          - select.hot_water_setting_curve
-          - select.underfloor_heating_setting_curve
+          - entity: select.heating_setting_curve
+          - entity: select.underfloor_heating_setting_curve
+          - entity: select.cooling_setting_curve
+          - entity: select.hot_water_setting_curve
+      - type: custom:scheduler-card
+        default_editor: scheme
+        show_header_toggle: true
     type: masonry
     show_icon_and_title: true
   - title: Diagnostiek
@@ -256,12 +279,12 @@ views:
         title: Elektrisch & Communicatie
         show_header_toggle: false
         entities:
+          - entity: binary_sensor.error_communication_failure
+            name: Communicatiefout
           - entity: binary_sensor.error_wrong_phase
             name: Verkeerde fase
           - entity: binary_sensor.error_missing_phase
             name: Fase ontbreekt
-          - entity: binary_sensor.error_communication_failure
-            name: Communicatiefout
       - type: entities
         title: Water   sensoren
         show_header_toggle: true
@@ -300,7 +323,7 @@ views:
           - entity: binary_sensor.running_status_shutdown_after_reaching_temp
           - entity: binary_sensor.running_status_shutdown_after_unit_failure
           - entity: binary_sensor.running_status_unit_waiting_for_operation
-        title: Status sensoren
+        title: Actieve status sensoren
         color: red
         show_header_toggle: true
       - type: entities
@@ -321,3 +344,18 @@ views:
             name: Omgevingstemp. te laag
     type: masonry
     show_icon_and_title: true
+  - type: custom:vertical-layout
+    cards:
+      - type: gauge
+        entity: sensor.warmtepomp_klimaat_setpoint
+        name: Warm water setpoint
+        needle: true
+        min: 0
+        max: 80
+      - type: gauge
+        entity: sensor.warmtepomp_klimaat_setpoint
+        name: Klimaat setpoint
+        needle: true
+        min: 0
+        max: 80
+    title: estra

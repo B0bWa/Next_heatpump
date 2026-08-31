@@ -1,21 +1,19 @@
 # Next_heatpump — Home Assistant Integration
 
 
-<img width="400" height="300" alt="xlarge_Heative_Next_Incl_R290_9bada899cd" src="https://github.com/user-attachments/assets/b314144f-d007-4edc-bede-11d402fa12d3" />
+<img width="400" height="300" alt="xlarge_Heative_Next_Incl_R290_9bada899cd" src="https://github.com/user-attachments/assets/b314144f-d007-4edc-bede-11d402fa12d3" />  
 
 
 A HACS-compatible custom integration for the **Heative Next R290 heat pump**, communicating over **Modbus TCP** via an RS485-to-WiFi gateway.
 
-No YAML required. All setup is done through the Home Assistant UI.
+No YAML required. All setup is done through the Home Assistant UI. But for dashboard and timeschedule extra repository and yaml files are required.
 
-This software is a fork of the Adlar Aurora II repository as developed by https://github.com/conradhagemans. Thank you for this repository! 
+This software is a fork of the Adlar Aurora II repository as developed by https://github.com/conradhagemans.  
 ---
 
 ## Hardware setup
 
-This integration was developed and tested with the following hardware NOT WORKING YET, only Ha sole one connection directly no display or Waveshare attached!!: The Waveshare is 1 master 2 slave device. not working at all. ordered E810-r21 instead. NOT WORKING YET
-
-
+This integration was developed and tested with the following hardware NOT WORKING YET, only Ha sole one connection directly no display or Waveshare attached!!: The Waveshare is 1 master 2 slave device. not working at all. ordered E810-r21 instead. NOT WORKING at all because of timing problems. So this repository only works properly when attached in stead of display! 
 <img width="300" height="250" alt="display" src="https://github.com/user-attachments/assets/20c5453a-56c3-44a9-8a18-39b98387c47c" />
 
 <img width="300" height="250" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
@@ -32,7 +30,7 @@ This integration was developed and tested with the following hardware NOT WORKIN
 
 [E810-Rx1+User+Manual_EN_v1.0.pdf](https://github.com/user-attachments/files/31154340/E810-Rx1%2BUser%2BManual_EN_v1.0.pdf)
 
-Any RS485-to-Modbus-TCP bridge should work (Elfin, USR-W610, etc.).
+Any RS485-to-Modbus-TCP bridge should work.
 
 ---
 
@@ -117,20 +115,13 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
 | Thermal Power | kW | Calculated: flow × ΔT × 4.186 / 60 |
 | COP | — | Calculated: thermal power / electrical power |
 | Calculated Power | W | Calculated: voltage × current |
+| Fan settings in ECO mode| 20-60 Hz |  |
+| Compressor settings in ECO mode |20- 80 Hz |  |
 
-### Binary Sensors (running status)
-| Name | Notes |
-|---|---|
-| Running Status: Refrigerant Recovery | |
-| Running Status: Primary Anti-freeze | |
-| Running Status: Secondary Anti-freeze | |
-| Running Status: Fault Alarm | |
-| Running Status: System Oil Return | |
-| Running Status: System Frosting | |
-| Running Status: Shutdown after Reaching Temp | |
-| Running Status: Shutdown after Unit Failure | |
-| Running Status: Unit Operation | |
-| Running Status: Unit Waiting for Operation | |
+
+### Several Binary Sensors and fault sensors 
+<img width="1000" height="700" alt="{232E0B90-1DE7-421C-B3C2-22C8227567AA}" src="https://github.com/user-attachments/assets/f1a6042f-7bde-422a-be24-681d031edaaf" />
+
 
 ### Controls
 | Entity | Type | Options / Range |
@@ -146,23 +137,38 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
 | Heating Setting Curve | Select | Off, H1–H8, L1–L8 |
 | Underfloor Heating Setting Curve | Select | Off, H1–H8, L1–L8 |
 | Hot water Setting Curve | Select | Off, 1-4 |
-
+| Temp setting auxiliary heating P22 | Select | temp value |
 ---
 
 ## Technical notes
 
-### Modbus addressing
-This integration applies a **-1 address offset** to sensor registers (`0x0040`–`0x0085`). The firmware uses 1-based register addressing in this range, while pymodbus uses 0-based addressing. Control registers (`0x0300`+) and status registers (`0x0000`) do not require this correction.
+Controls — toevoegen aan de tabel
+Entity	Type	Options / Range
+Compressor Forced Control	Switch	on / off — dwingt handmatige compressorfrequentie af
+Fan Forced Control	Switch	on / off — dwingt handmatige ventilatorsnelheid af
+Compressor Forced Frequency	Number	0–120 Hz — alleen actief zolang "Compressor Forced Control" aan staat
+Fan Forced Speed	Number	0–80 Hz — alleen actief zolang "Fan Forced Control" aan staat
+Silent Mode - Compressor Max Frequency	Number	20–70 Hz — bovengrens tijdens Silent/Eco-modus (fabrieksparameter P88)
+Silent Mode - Fan Max Frequency	Number	20–60 Hz — bovengrens tijdens Silent/Eco-modus (fabrieksparameter P89)
+Nieuwe paragraaf — "Silent Mode frequentiegrenzen (P88/P89)"
 
-### Registers not available on R32 model
-The following registers always return 0 on the R32 model and are excluded:
-- `0x0044` AC Input Voltage
-- `0x0047` Compressor IPM Temperature
+Registers 0x0158 (compressor, 20–70 Hz) en 0x0159 (ventilator, 20–60 Hz) uit de "System Parameters P"-sectie (0x0100–0x02FF) van de Engineering Manual. Dit zijn dezelfde grenswaarden die op het bediendisplay onder installateurswachtwoord instelbaar zijn (P88/P89, hoofdstuk "Silent Mode") — bedoeld om geluidsoverlast te beperken.
+
+Dit is geen forceerwaarde: de warmtepomp blijft binnen deze grens gewoon zelf regelen op basis van vraag/druk/temperatuur. De grens geldt alleen zolang de unit in Silent/Eco-modus draait (zet de bestaande "Running Mode" select-entiteit op "Eco"). Met deze twee registers is het bediendisplay dus niet meer nodig om deze waarden aan te passen.
+
+Nieuwe paragraaf — "Forced control (compressor/fan)"
+
+Sinds deze versie kun je de compressorfrequentie en ventilatorsnelheid handmatig vastzetten, gebaseerd op register 0x0331 ("Load Forcing Control") en de bijbehorende waarderegisters 0x0332 (compressor, 0–120 Hz) en 0x033E (ventilator, 0–80 Hz) uit de Engineering Manual.
+
+Dit is een service-/commissioningfunctie, GEEN NORMALE BEDIENINGSKNOP. Zolang de bijbehorende "Forced Control"-switch aan staat, negeert de warmtepomp zijn eigen regellus voor dat onderdeel en houdt hij de ingestelde frequentie/snelheid aan — zonder zelf te corrigeren op basis van druk, temperatuur of andere veiligheidsgrenzen. Zet de switch na gebruik altijd weer uit.
+
+Incorrect gebruik van deze functie kan de warmtepomp beschadigen of onveilige bedrijfscondities veroorzaken (bijv. te hoge/lage druk). Gebruik op eigen risico — zie de disclaimer onderaan dit document.
+
 
 ### Scan interval
 The default scan interval is 45 seconds. With ~40 registers × 200ms delay = ~8 seconds per poll cycle, a minimum of 30 seconds is recommended.
 
 ---
 
-## Disclaimer
-**This integration is community-developed and not affiliated with Heative,Adlår or SolarEast. Use at your own risk. Incorrect writes to control registers could affect heat pump operation. Always verify setpoints before applying changes.**
+## DISCLAIMER
+**This integration is community-developed and not affiliated with Heative, Adlår or SolarEast. USE AT YOUR RISK. Incorrect writes to control registers could affect heat pump operation. Always verify setpoints before applying changes.**

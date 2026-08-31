@@ -199,3 +199,123 @@ def get_temperature_scale(refrigerant_type: int) -> float:
     R290 gebruikt ook 1, alle andere ×1.
     """
     return 1 if refrigerant_type == 3 else 1.0
+
+
+# ─────────────────────────────────────────────
+# Geforceerde besturing (Load Forcing) — Engineering Manual, hfst.
+# "5. UserCommands 0x0330": "Unit forced control, frequency/speed of
+# forced control". Zet de warmtepomp voor het gekozen subsysteem buiten
+# zijn normale regellus en dwingt een vaste compressorfrequentie of
+# ventilatorsnelheid af, ongeacht wat de normale besturingslogica zou
+# kiezen.
+#
+# Dit is een service-/commissioning-functie, geen normale bedieningsknop:
+# zolang het bijbehorende bit aan staat, blijft de opgegeven frequentie/
+# snelheid aangehouden totdat het bit weer uit wordt gezet — de warmtepomp
+# corrigeert dan niet meer zelf op basis van druk, temperatuur of
+# veiligheidsgrenzen voor dat subsysteem. Zie de disclaimer in README.md;
+# alleen compressor en ventilator zijn hier ontsloten (EEV/EVI-forcering en
+# de "Compressor 2"-variant voor dual-systeem-units bewust niet, buiten de
+# scope van deze feature).
+#
+# 0x0331 "Load Forcing Control" — bitmask-register, elk bit schakelt
+# geforceerde besturing voor één subsysteem in (1) of uit (0).
+FORCE_CONTROL_REGISTER = 0x0331
+FORCE_CONTROL_BITS = [
+    (0x0001, "Compressor Forced Control"),
+    (0x0008, "Fan Forced Control"),
+]
+
+# Geforceerde frequentie-/snelheidswaarden. Hebben alleen effect zolang het
+# bijbehorende bit in FORCE_CONTROL_BITS aan staat.
+# address, name, unit, device_class, min, max, step
+FORCE_VALUE_REGISTERS = [
+    (0x0332, "Compressor Forced Frequency", "Hz", "frequency", 0, 120, 1),
+    (0x033E, "Fan Forced Speed",            "Hz", "frequency", 0, 80,  1),
+]
+
+# ─────────────────────────────────────────────
+# Silent Mode frequentiegrenzen — Engineering Manual, "System Parameters P"
+# (0x0100～0x02FF), registers 0x0158/0x0159. Dit zijn de Modbus-adressen
+# achter de fabrieksparameters P88 ("Max. compressor operating frequency",
+# standaard 50Hz, 20-70Hz) en P89 ("Max. fan operating frequency", standaard
+# 40Hz, 20-60Hz) die op het bediendisplay onder installateurswachtwoord
+# staan, in het hoofdstuk "Silent Mode" — bedoeld om geluidsoverlast te
+# beperken.
+#
+# Dit is GEEN forceerwaarde zoals FORCE_VALUE_REGISTERS hierboven: het zijn
+# bovengrenzen die alleen gelden zolang de unit in Silent/Eco-modus draait
+# (zie SELECT_REGISTERS "Running Mode", waarde "Eco" = 2 = fabrieksmatig
+# "Silent mode"). Binnen die grens blijft de warmtepomp gewoon zelf regelen
+# op basis van vraag/druk/temperatuur — vergelijkbaar met wat je via het
+# display met installateurswachtwoord kon instellen.
+# address, name, unit, device_class, min, max, step
+SILENT_MODE_REGISTERS = [
+    (0x0158, "Silent Mode - Compressor Max Frequency", "Hz", "frequency", 20, 70, 1),
+    (0x0159, "Silent Mode - Fan Max Frequency",         "Hz", "frequency", 20, 60, 1),
+]
+
+# ─────────────────────────────────────────────
+# Elektrisch bijverwarmingselement — vrijgavetemperatuur (P22)
+# Engineering Manual, "System Parameters P" (0x0100～0x02FF), register
+# 0x0116. Komt overeen met fabrieksparameter P22 ("Ambient temperature
+# value - Allow electric heater to start", hoofdstuk 4.3.2 Factory
+# Parameter, sectie "Electric heating"): de buitentemperatuur waaronder
+# de elektrische bijverwarming mag inschakelen als ondersteuning van de
+# warmtepomp. Standaard -7°C op de meeste unitvarianten, instelbaar
+# -15～40°C.
+#
+# LET OP: dit bereik bevat negatieve waarden. write_register() in
+# coordinator.py maskeert de te schrijven waarde daarom naar 16-bit
+# unsigned (two's complement) vóór verzending — zie de toelichting daar.
+# address, name, unit, device_class, min, max, step
+ELECTRIC_HEATER_REGISTERS = [
+    (0x0116, "Electric Heater Allow Start Temp.", "°C", "temperature", -15, 40, 1),
+]
+
+# ─────────────────────────────────────────────
+# 6. Version Information 0x0360~0x036F
+# (Product Model / Customized Version / Software Version)
+#
+# Alleen de vier door de fabrikant gedocumenteerde registers in dit blok
+# zijn hier opgenomen (0x0360-0x0363, aaneengesloten, één batch-read);
+# 0x0364-0x036F staan niet in de manual en worden niet uitgelezen.
+# Alle vier zijn read-only (R) — er komt dus geen number/select-entiteit
+# voor, alleen sensoren.
+# ─────────────────────────────────────────────
+VERSION_INFO_START_REGISTER = 0x0360  # t/m 0x0363, 4 registers
+
+# Program Version (0x0360) en Protocol Version (0x0363): de raw waarde is
+# major*100 + minor, bijv. 100 → weergegeven als "V1.00". De manual noteert
+# de defaultwaarde van Program Version als "V1.0." en die van Protocol
+# Version als "V1.0.0" — twee verschillende notaties voor kennelijk hetzelfde
+# schaalformaat; vermoedelijk een inconsistentie in het brondocument. Beide
+# worden hier op dezelfde manier geformatteerd, zie coordinator._fetch_all.
+
+# Product Type (0x0361):
+PRODUCT_TYPE_MAP = {
+    0: "Commercial inverter unit",
+    1: "Domestic ON/OFF unit",
+    2: "Commercial ON/OFF unit",
+}
+
+# Product Type ID Number (0x0362) — de betekenis is afhankelijk van de
+# gelijktijdige waarde van Product Type (0x0361). Letterlijk overgenomen uit
+# de manual-note:
+#   Product Type=0 (Commercial inverter unit):
+#       0 = Commercial inverter 2-unit, 1 = Commercial inverter 3-unit
+#   Product Type=1 (Domestic ON/OFF unit):
+#       0 = Domestic inverter unit
+#   Product Type=2 (Commercial ON/OFF unit):
+#       0 = Commercial inverter unit
+# LET OP: bij Product Type=2 noemt de manual ID-waarde 0 zélf ook weer
+# "Commercial inverter unit" — inconsistent met Product Type=2 zelf, dat
+# "Commercial ON/OFF unit" heet. Dit lijkt een fout/typo in het
+# brondocument; hier bewust letterlijk overgenomen in plaats van
+# stilzwijgend gecorrigeerd, zodat je dit zelf tegen je eigen toestel kunt
+# verifiëren (kijk wat Product Type bij jouw model teruggeeft).
+PRODUCT_TYPE_ID_MAP = {
+    0: {0: "Commercial inverter 2-unit", 1: "Commercial inverter 3-unit"},
+    1: {0: "Domestic inverter unit"},
+    2: {0: "Commercial inverter unit"},
+}

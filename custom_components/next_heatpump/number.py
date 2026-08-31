@@ -7,8 +7,24 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, NUMBER_REGISTERS
+from .const import (
+    DOMAIN,
+    NUMBER_REGISTERS,
+    FORCE_VALUE_REGISTERS,
+    SILENT_MODE_REGISTERS,
+    ELECTRIC_HEATER_REGISTERS,
+)
 from .coordinator import NextCoordinator
+
+# Namen uit FORCE_VALUE_REGISTERS krijgen een afwijkend icoon (zie
+# NextNumber hieronder) zodat ze in de UI visueel te onderscheiden zijn van
+# gewone setpoints: ze hebben alleen effect zolang de bijbehorende Load
+# Forcing-switch aan staat, en overschrijven dan de normale regellus.
+# SILENT_MODE_REGISTERS (P88/P89) krijgen bewust GEEN afwijkend icoon: dat
+# zijn normale, door de fabrikant bedoelde instellingen (dezelfde die je via
+# het bediendisplay met installateurswachtwoord kunt zetten), geen
+# service-override.
+_FORCE_VALUE_NAMES = {name for _, name, *_ in FORCE_VALUE_REGISTERS}
 
 
 async def async_setup_entry(
@@ -17,7 +33,11 @@ async def async_setup_entry(
     coordinator: NextCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities = [
         NextNumber(coordinator, address, name, unit, device_class, mn, mx, step)
-        for address, name, unit, device_class, mn, mx, step in NUMBER_REGISTERS
+        for address, name, unit, device_class, mn, mx, step
+        in NUMBER_REGISTERS
+        + SILENT_MODE_REGISTERS
+        + ELECTRIC_HEATER_REGISTERS
+        + FORCE_VALUE_REGISTERS
     ]
     async_add_entities(entities)
 
@@ -35,6 +55,8 @@ class NextNumber(CoordinatorEntity, NumberEntity):
         self._attr_native_max_value = mx
         self._attr_native_step = step
         self._attr_mode = NumberMode.BOX
+        if name in _FORCE_VALUE_NAMES:
+            self._attr_icon = "mdi:alert-decagram-outline"
 
     @property
     def native_value(self) -> float | None:

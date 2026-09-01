@@ -175,4 +175,4 @@ The default scan interval is 45 seconds. With ~40 registers × 200ms delay = ~8 
 ---
 
 ## DISCLAIMER
-**This integration is community-developed and not affiliated with Heative, Adlår or SolarEast. USE AT YOUR RISK. Incorrect writes to control registers could affect heat pump operation. Always verify setpoints before applying changes.**
+**This integration is community-developed and not affiliated with Heative, Adlår or SolarEast. USE AT YOUR OWN RISK. Incorrect writes to control registers could affect heat pump operation. Always verify setpoints before applying changes.**

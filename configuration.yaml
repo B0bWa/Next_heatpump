@@ -1,18 +1,4 @@
-# Loads default set of integrations. Do not remove.
-default_config:
-# Load frontend themes from the themes folder
-frontend:
-  themes: !include_dir_merge_named themes
-# Text to speech
-tts:
-  - platform: google_translate
-
-utility_meter:
-  energieverbruik_warmtepomp:
-    source: sensor.unit_power_consumption
-    name: Energieverbruik warmtepomp
-    cycle: daily
-
+# Toevoegen voor de schema instellingen Normaal/ Eco schema's
 homeassistant:
    customize: !include customize.yaml
 
@@ -21,7 +7,7 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 sensor: !include_dir_merge_list sensors/
 
-# Voor Heat Next WP
+# Voor Heat Next WP setpoint dit toevoegen
 template:
   - sensor:
       - name: "Warmtepomp klimaat setpoint"
@@ -52,23 +38,4 @@ template:
         state: >
           {{ states('number.temp_set_hot_water') }}
 
-
-ingress:
-#   zigbee2mqtt1:
-#     work_mode: hassio
- #    title: Zigbee2Mqtt huis
-  #   icon: mdi:zigbee
-   #  url: 45df7312_zigbee2mqtt
-   zigbee2mqtt2:
-     work_mode: hassio
-     title: Zigbee2Mqtt atelier
-     icon: mdi:zigbee
-     url: 1ff69cfe_zigbee2mqtt
-mqtt: !include mqtt.yaml
-
-
-input_boolean:
-  warmtepomp_schema_actief:
-    name: "Warmtepomp schema actief"
-    icon: mdi:calendar-clock
 

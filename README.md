@@ -1,30 +1,31 @@
 # Next_heatpump — Home Assistant Integration
 
 
-<img width="400" height="300" alt="xlarge_Heative_Next_Incl_R290_9bada899cd" src="https://github.com/user-attachments/assets/b314144f-d007-4edc-bede-11d402fa12d3" />  
+<img width="200" height="150" alt="xlarge_Heative_Next_Incl_R290_9bada899cd" src="https://github.com/user-attachments/assets/b314144f-d007-4edc-bede-11d402fa12d3" />  
 
 
 A HACS-compatible custom integration for the **Heative Next R290 heat pump**, communicating over **Modbus TCP** via an RS485-to-WiFi gateway.
 
-No YAML required. All setup is done through the Home Assistant UI. But for dashboard and timeschedule extra repository and yaml files are required.
+No YAML required. All setup is done through the Home Assistant UI. But for dashboard and timeschedule extra repository and yaml files are required. See install via HACS: https://github.com/nielsfaber/scheduler-component  
 
-This software is a fork of the Adlar Aurora II repository as developed by https://github.com/conradhagemans.  
+### This software is a fork of the Adlar Aurora II repository as developed by https://github.com/conradhagemans.  
 ---
 
 ## Hardware setup
 
-This integration was developed and tested with the following hardware NOT WORKING YET, only Ha only one connection directly no display or Waveshare attached!!: The Waveshare is 1 master 2 slave device. not working at all. ordered E810-r21 instead. NOT WORKING at all because of timing problems. So this repository only works properly when attached instead of display! 
+This integration was developed and tested with the following hardware:   
 
-<img width="300" height="250" alt="display" src="https://github.com/user-attachments/assets/20c5453a-56c3-44a9-8a18-39b98387c47c" />
+<img width="150" height="125" alt="display" src="https://github.com/user-attachments/assets/20c5453a-56c3-44a9-8a18-39b98387c47c" />
 
-<img width="300" height="250" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
+<img width="150" height="125" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
 
-<img width="300" height="250" alt="Naamloos" src="https://github.com/user-attachments/assets/f37784bc-e5b3-4190-a267-d83e73a5b944" />
+<img width="150" height="125" alt="Naamloos" src="https://github.com/user-attachments/assets/f37784bc-e5b3-4190-a267-d83e73a5b944" />
+
 
 
 - **E810-R21 Ebyte** RS485 splitter (2 master / 1 slave): 
   - **Slave port** → Modbus RS485 cable from the heat pump
-  - **Master 1** → Display original controller
+  - **Master 1** → Elfin EW11 4G module
   - **Master 2** → Elfin EW11A (RS485 to WiFi/TCP bridge)
 - The **Elfin EW11A** configured as TCP Server on port **502**
 - Modbus slave ID of the heat pump: **1** (default)
@@ -33,6 +34,7 @@ This integration was developed and tested with the following hardware NOT WORKIN
 
 Any RS485-to-Modbus-TCP bridge should work.
 
+###  Or disconnect TFT display and use this repository with EW11A instead. Both connected on the display connection rs485 WILL NOT WORK!
 ---
 
 ## Elfin EW11 configuration
@@ -45,7 +47,7 @@ Any RS485-to-Modbus-TCP bridge should work.
 - Parity: `None`
 - Buffer Size: `1024`
 - Gap Time: `100`
-- <img width="700" height="700" alt="{E7B4D0CA-61EF-42FF-AC66-2C990CC92447}" src="https://github.com/user-attachments/assets/2c12cfb9-5e27-4f42-8286-12312379f9bc" />
+- <img width="350" height="350" alt="{E7B4D0CA-61EF-42FF-AC66-2C990CC92447}" src="https://github.com/user-attachments/assets/2c12cfb9-5e27-4f42-8286-12312379f9bc" />
 
 
 **Communication Settings:**
@@ -53,7 +55,7 @@ Any RS485-to-Modbus-TCP bridge should work.
 - Local Port: `502`
 - max 1 connection allowed
 ---
-<img width="700" height="750" alt="{DDE042DB-5CA4-4184-A9F6-3280C5142FAC}" src="https://github.com/user-attachments/assets/6f7f7b44-7773-4fa5-8663-0195a624c6b8" />
+<img width="350" height="375" alt="{DDE042DB-5CA4-4184-A9F6-3280C5142FAC}" src="https://github.com/user-attachments/assets/6f7f7b44-7773-4fa5-8663-0195a624c6b8" />
 
 ## Installation
 
@@ -82,9 +84,9 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
    - **Scan interval** in seconds (default `45`)
 
 ---
-** Schema normal/ eco modus
+## Schema normal/ eco modus
 
-Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (backend) en de bijbehorende scheduler-card (frontend). Omdat de kaart niet vanzelf weet welke opties jouw select.running_mode heeft, geeft het tweede bestand die koppeling mee ("Standard Mode" → Normaal, "Eco" → Eco/Silent). Daarna maak je de twee tijdsblokken (08:00 → Normaal, 22:00 → Eco) rechtstreeks in de kaart zelf aan — geen YAML meer nodig voor het schema, en volledig tikbaar/aanpasbaar vanaf het dashboard.
+Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (backend) en de bijbehorende scheduler-card (frontend). Omdat de kaart niet vanzelf weet welke opties jouw select.running_mode heeft, geeft het bestand  customize.yaml die koppeling mee ("Standard Mode" → Normaal, "Eco" → Eco/Silent). Daarna maak je de twee tijdsblokken (08:00 → Normaal, 22:00 → Eco) rechtstreeks in de kaart zelf aan — geen YAML meer nodig voor het schema, en volledig tikbaar/aanpasbaar vanaf het dashboard.
 
 ## Entities created
 
@@ -124,7 +126,7 @@ Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (
 
 
 ### Several Binary Sensors and fault sensors 
-<img width="1000" height="700" alt="{232E0B90-1DE7-421C-B3C2-22C8227567AA}" src="https://github.com/user-attachments/assets/f1a6042f-7bde-422a-be24-681d031edaaf" />
+<img width="750" height="500" alt="{232E0B90-1DE7-421C-B3C2-22C8227567AA}" src="https://github.com/user-attachments/assets/f1a6042f-7bde-422a-be24-681d031edaaf" />
 
 
 ### Controls
@@ -146,7 +148,7 @@ Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (
 
 ## Technical notes
 
-Controls — toevoegen aan de tabel
+### Controls — toevoegen aan de tabel
 Entity	Type	Options / Range
 Compressor Forced Control	Switch	on / off — dwingt handmatige compressorfrequentie af
 Fan Forced Control	Switch	on / off — dwingt handmatige ventilatorsnelheid af
@@ -164,7 +166,8 @@ Nieuwe paragraaf — "Forced control (compressor/fan)"
 
 Sinds deze versie kun je de compressorfrequentie en ventilatorsnelheid handmatig vastzetten, gebaseerd op register 0x0331 ("Load Forcing Control") en de bijbehorende waarderegisters 0x0332 (compressor, 0–120 Hz) en 0x033E (ventilator, 0–80 Hz) uit de Engineering Manual.
 
-Dit is een service-/commissioningfunctie, GEEN NORMALE BEDIENINGSKNOP. Zolang de bijbehorende "Forced Control"-switch aan staat, negeert de warmtepomp zijn eigen regellus voor dat onderdeel en houdt hij de ingestelde frequentie/snelheid aan — zonder zelf te corrigeren op basis van druk, temperatuur of andere veiligheidsgrenzen. Zet de switch na gebruik altijd weer uit.
+### Dit is een service-/commissioningfunctie, GEEN NORMALE BEDIENINGSKNOP. ALLEEN GEBRUIKEN IN TESTMODUS
+Zolang de bijbehorende "Forced Control"-switch aan staat, negeert de warmtepomp zijn eigen regellus voor dat onderdeel en houdt hij de ingestelde frequentie/snelheid aan — zonder zelf te corrigeren op basis van druk, temperatuur of andere veiligheidsgrenzen. Zet de switch na gebruik altijd weer uit.
 
 Incorrect gebruik van deze functie kan de warmtepomp beschadigen of onveilige bedrijfscondities veroorzaken (bijv. te hoge/lage druk). Gebruik op eigen risico — zie de disclaimer onderaan dit document.
 

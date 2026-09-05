@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────────
+# Toevoegen aan customize.yaml (of het bestand dat je "customize:" in
+# configuration.yaml al insluit — 
+# ─────────────────────────────────────────────────────────────────
+# Dit vertelt de scheduler-card welke opties select.running_mode heeft, en
+# hoe die er in de kaart uit moeten zien. Pas de "value"-velden aan als je
+# select-entiteit andere exacte optienamen gebruikt dan hieronder — check
+# dit in Ontwikkelaarstools → Statussen bij select.running_mode.
+
+select.running_mode:
+  actions:
+    - service: select.select_option
+      name: "Modus instellen"
+      variables:
+        option:
+          name: "Modus"
+          options:
+            - value: "Standard Mode"
+              name: "Normaal"
+            - value: "Boost"
+              name: "Boost"
+            - value: "Eco"
+              name: "Eco / Silent"

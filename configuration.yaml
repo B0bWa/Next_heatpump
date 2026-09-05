@@ -1,0 +1,74 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+# Text to speech
+tts:
+  - platform: google_translate
+
+utility_meter:
+  energieverbruik_warmtepomp:
+    source: sensor.unit_power_consumption
+    name: Energieverbruik warmtepomp
+    cycle: daily
+
+homeassistant:
+   customize: !include customize.yaml
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+sensor: !include_dir_merge_list sensors/
+
+# Voor Heat Next WP
+template:
+  - sensor:
+      - name: "Warmtepomp klimaat setpoint"
+        unique_id: warmtepomp_klimaat_setpoint
+        unit_of_measurement: "°C"
+        device_class: temperature
+        icon: mdi:thermostat
+        availability: >
+          {{ states('select.mode') in ['Cooling', 'Heating', 'Floor Heating',
+             'Hot Water + Cooling', 'Hot Water + Heating', 'Hot Water + Floor Heating'] }}
+        state: >
+          {% set mode = states('select.mode') %}
+          {% if mode in ['Cooling', 'Hot Water + Cooling'] %}
+            {{ states('number.temp_set_cooling') }}
+          {% elif mode in ['Heating', 'Hot Water + Heating'] %}
+            {{ states('number.temp_set_heating') }}
+          {% elif mode in ['Floor Heating', 'Hot Water + Floor Heating'] %}
+            {{ states('number.temp_set_floor_heating') }}
+          {% endif %}
+ 
+      - name: "Warmtepomp warm water setpoint"
+        unique_id: warmtepomp_warmwater_setpoint
+        unit_of_measurement: "°C"
+        device_class: temperature
+        icon: mdi:water-thermometer
+        availability: >
+          {{ 'Hot Water' in states('select.mode') }}
+        state: >
+          {{ states('number.temp_set_hot_water') }}
+
+
+ingress:
+#   zigbee2mqtt1:
+#     work_mode: hassio
+ #    title: Zigbee2Mqtt huis
+  #   icon: mdi:zigbee
+   #  url: 45df7312_zigbee2mqtt
+   zigbee2mqtt2:
+     work_mode: hassio
+     title: Zigbee2Mqtt atelier
+     icon: mdi:zigbee
+     url: 1ff69cfe_zigbee2mqtt
+mqtt: !include mqtt.yaml
+
+
+input_boolean:
+  warmtepomp_schema_actief:
+    name: "Warmtepomp schema actief"
+    icon: mdi:calendar-clock
+

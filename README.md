@@ -123,10 +123,77 @@ Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (
 | Calculated Power | W | Calculated: voltage × current |
 | Fan settings in ECO mode| 20-60 Hz |  |
 | Compressor settings in ECO mode |20- 80 Hz |  |
+| Heating Curve Target | °C | Calculated: doel-watertemp. volgens de gekozen stooklijn (Heating Setting Curve) + actuele buitentemp. (T1). Zie Technical notes. |
+| Unit Temperature Control Mode | — | Read-only. "Inlet (T6)" of "Outlet (T7)" — zie Technical notes (P116) |
+| Actual Controlled Water Temp | °C | T6 of T7, automatisch gekozen op basis van Unit Temperature Control Mode |
+
+---
+
+## Technical notes (vervolg)
+
+### Gevolgde stooklijn (Heating Curve Target)
+
+De Engineering Manual (hfst. 4.1.1) definieert 16 vaste stooklijnen (H1–H8
+"High Temperature Curve", L1–L8 "Low Temperature Curve"), elk een tabel die
+een buitentemperatuur-bereik koppelt aan een doel-watertemperatuur. Deze
+tabellen zijn overgenomen in `const.py` (`HEATING_CURVES`) en worden live
+doorgerekend tegen de actuele buitentemperatuur (T1) en de gekozen curve
+(`Heating Setting Curve`), resultaat in `sensor.heating_curve_target`.
+
+**Bekende afwijking in het brondocument:** in de HL4-tabel ontbreekt het
+buitentemperatuurbereik 8–13°C (springt in de manual direct van "13≤T<18"
+naar "6≤T<8") — vermoedelijk een druk-/OCR-fout. Letterlijk overgenomen;
+in dat bereik geeft de sensor `Onbekend` terug. Verifieer tegen je eigen
+papieren handleiding als je HL4 in dat bereik gebruikt.
+
+De volledige curve (alle breekpunten) staat als `curve_points`-attribuut op
+`sensor.heating_curve_target`, bruikbaar voor een grafiekweergave op je
+dashboard — zie [Dashboard: stooklijn-grafiek](#dashboard-stooklijn-grafiek)
+hieronder.
+
+### P116 — Unit Temperature Control Mode
+
+Fabrieksparameter (register `0x0174`, manual hfst. 2.8) die bepaalt of de
+unit intern regelt op de water-**inlet** (T6) of water-**outlet** (T7)
+temperatuur. Bewust **niet** geïmplementeerd als schrijfbare `select`
+entiteit — in tegenstelling tot Mode/Running Mode is dit geen routinematige
+bedieningskeuze maar een installatie-/servicetijdsparameter, en een
+dropdown-weergave zou dat ten onrechte suggereren. In plaats daarvan:
+
+- `sensor.unit_temperature_control_mode` toont de huidige waarde,
+  alleen-lezen.
+- `sensor.actual_controlled_water_temp` volgt hier automatisch op: geeft
+  altijd T6 of T7 terug, wat de unit ook daadwerkelijk als regelreferentie
+  gebruikt — zodat andere berekeningen (zoals de stooklijn-vergelijking
+  hierboven) niet zelf hoeven te kiezen tussen T6/T7 en correct blijven als
+  deze parameter ooit wijzigt.
+
+### Dashboard: stooklijn-grafiek
+
+Een voorbeeld-dashboardsectie (entities-kaart + grafiek van de gekozen
+curve met een gemarkeerd huidig-punt) staat in
+[`dashboard/stooklijn-sectie.yaml`](dashboard/stooklijn-sectie.yaml).
+
+**Vereist: [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
+via HACS** (categorie Frontend). Home Assistant heeft standaard geen kaart
+die een vaste functie (buitentemp. → doeltemp.) kan plotten los van
+tijdreeksen — deze community-kaart wel, via zijn `data_generator`-optie.
+
+De grafiek toont de curve als trapvorm (`stroke.curve: stepline`, één punt
+per temperatuurbucket) en sluit netjes af met een bericht in plaats van een
+lege/kapotte grafiek wanneer `Heating Setting Curve` op **Off** staat.
+
+---
+
+## Changelog
+
+Zie [`CHANGELOG.md`](CHANGELOG.md) voor de volledige lijst met bugfixes en
+nieuwe features per release.
 
 
 ### Several Binary Sensors and fault sensors 
 <img width="750" height="500" alt="{232E0B90-1DE7-421C-B3C2-22C8227567AA}" src="https://github.com/user-attachments/assets/f1a6042f-7bde-422a-be24-681d031edaaf" />
+
 
 
 ### Controls
@@ -144,31 +211,28 @@ Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (
 | Underfloor Heating Setting Curve | Select | Off, H1–H8, L1–L8 |
 | Hot water Setting Curve | Select | Off, 1-4 |
 | Temp setting auxiliary heating P22 | Select | temp value |
----
+| Min Flow Protection | Number | 0–100 L/min — fabrieksparameter ("Low protection value - Water flow rate", register 0x0186). Bescherming tegen te lage waterdoorstroming. |
+|Compressor Forced Control	Switch	on / off — |dwingt handmatige compressorfrequentie af
+|Fan Forced Control	Switch	on / off — |dwingt handmatige ventilatorsnelheid af
+|Compressor Forced Frequency	Number	0–120 Hz —|alleen actief zolang "Compressor Forced Control" aan staat
+|Fan Forced Speed	Number	0–80 Hz — |alleen actief zolang "Fan Forced Control" aan staat
+|Silent Mode - Compressor Max Frequency	Number	|20–70 Hz —| bovengrens tijdens Silent/Eco-modus (fabrieksparameter P88)
+|Silent Mode - Fan Max Frequency	Number	|20–60 Hz — |bovengrens tijdens Silent/Eco-modus (fabrieksparameter P89)
 
 ## Technical notes
 
-### Controls — toevoegen aan de tabel
-Entity	Type	Options / Range
-Compressor Forced Control	Switch	on / off — dwingt handmatige compressorfrequentie af
-Fan Forced Control	Switch	on / off — dwingt handmatige ventilatorsnelheid af
-Compressor Forced Frequency	Number	0–120 Hz — alleen actief zolang "Compressor Forced Control" aan staat
-Fan Forced Speed	Number	0–80 Hz — alleen actief zolang "Fan Forced Control" aan staat
-Silent Mode - Compressor Max Frequency	Number	20–70 Hz — bovengrens tijdens Silent/Eco-modus (fabrieksparameter P88)
-Silent Mode - Fan Max Frequency	Number	20–60 Hz — bovengrens tijdens Silent/Eco-modus (fabrieksparameter P89)
-Nieuwe paragraaf — "Silent Mode frequentiegrenzen (P88/P89)"
+## "Silent Mode frequentiegrenzen (P88/P89)"
 
 Registers 0x0158 (compressor, 20–70 Hz) en 0x0159 (ventilator, 20–60 Hz) uit de "System Parameters P"-sectie (0x0100–0x02FF) van de Engineering Manual. Dit zijn dezelfde grenswaarden die op het bediendisplay onder installateurswachtwoord instelbaar zijn (P88/P89, hoofdstuk "Silent Mode") — bedoeld om geluidsoverlast te beperken.
-
 Dit is geen forceerwaarde: de warmtepomp blijft binnen deze grens gewoon zelf regelen op basis van vraag/druk/temperatuur. De grens geldt alleen zolang de unit in Silent/Eco-modus draait (zet de bestaande "Running Mode" select-entiteit op "Eco"). Met deze twee registers is het bediendisplay dus niet meer nodig om deze waarden aan te passen.
 
-Nieuwe paragraaf — "Forced control (compressor/fan)"
+## "Forced control (compressor/fan)"
 
 Sinds deze versie kun je de compressorfrequentie en ventilatorsnelheid handmatig vastzetten, gebaseerd op register 0x0331 ("Load Forcing Control") en de bijbehorende waarderegisters 0x0332 (compressor, 0–120 Hz) en 0x033E (ventilator, 0–80 Hz) uit de Engineering Manual.
 
 ### Dit is een service-/commissioningfunctie, GEEN NORMALE BEDIENINGSKNOP. ALLEEN GEBRUIKEN IN TESTMODUS
-Zolang de bijbehorende "Forced Control"-switch aan staat, negeert de warmtepomp zijn eigen regellus voor dat onderdeel en houdt hij de ingestelde frequentie/snelheid aan — zonder zelf te corrigeren op basis van druk, temperatuur of andere veiligheidsgrenzen. Zet de switch na gebruik altijd weer uit.
-
+Zolang de bijbehorende "Forced Control"-switch aan staat, negeert de warmtepomp zijn eigen regellus voor dat onderdeel en houdt hij de ingestelde frequentie/snelheid aan — zonder zelf te corrigeren op basis van druk, temperatuur of andere veiligheidsgrenzen.
+## Zet de switch na gebruik altijd weer uit of gebruik het niet en verwijder de entiteiten uit je lijst!
 Incorrect gebruik van deze functie kan de warmtepomp beschadigen of onveilige bedrijfscondities veroorzaken (bijv. te hoge/lage druk). Gebruik op eigen risico — zie de disclaimer onderaan dit document.
 
 
@@ -177,5 +241,5 @@ The default scan interval is 45 seconds. With ~40 registers × 200ms delay = ~8 
 
 ---
 
-## DISCLAIMER
-**This integration is community-developed and not affiliated with Heative, Adlår or SolarEast. USE AT YOUR OWN RISK. Incorrect writes to control registers could affect heat pump operation. Always verify setpoints before applying changes.**
+### DISCLAIMER
+**This integration is community-developed and not affiliated with Heative, Adlår or SolarEast. USE AT YOUR OWN RISK. Incorrect writes to control registers could affect heat pump operation. Always verify setpoints before applying changes.** Use of logo is approved by Heative, thanks!

@@ -7,16 +7,12 @@ views:
       - type: entities
         title: Status
         entities:
-          - entity: climate.next_hp
           - entity: switch.heatpump_on_off
+          - entity: climate.next_hp
           - entity: select.mode
           - entity: select.running_mode
-          - entity: binary_sensor.running_status_unit_operation
-            name: In bedrijf
           - entity: binary_sensor.running_status_fault_alarm
             name: Storing
-          - entity: sensor.water_outlet_temp_t7
-            name: Actuele temp. uitgaand (T7)
           - entity: sensor.program_version
           - entity: sensor.protocol_version
           - entity: sensor.refrigerant_type
@@ -65,12 +61,6 @@ views:
               green: 0
               yellow: 25
               red: 30
-          - type: gauge
-            entity: sensor.dhw_tank_temp
-            name: Boiler (DHW)
-            min: 0
-            max: 70
-            needle: true
       - type: glance
         title: Kerncijfers
         columns: 3
@@ -81,22 +71,6 @@ views:
             name: Thermisch vermogen
           - entity: sensor.unit_power_consumption
             name: Verbruik
-      - type: statistics-graph
-        title: COP trend (7 dagen)
-        entities:
-          - sensor.cop
-        stat_types:
-          - mean
-          - min
-          - max
-        days_to_show: 7
-        period: day
-      - type: history-graph
-        title: Vermogen laatste 24u
-        hours_to_show: 24
-        entities:
-          - sensor.unit_power_consumption
-          - sensor.thermal_power
       - type: entities
         title: Energie vandaag
         entities:
@@ -104,6 +78,23 @@ views:
             name: Verbruik (elektrisch)
           - entity: sensor.thermische_energie_warmtepomp
             name: Opbrengst (thermisch)
+      - type: statistics-graph
+        entities:
+          - sensor.cop
+        title: COP trend (7 dagen)
+        days_to_show: 7
+        period: day
+        chart_type: line
+        stat_types:
+          - mean
+          - min
+          - max
+      - type: history-graph
+        title: Vermogen laatste 24u
+        hours_to_show: 24
+        entities:
+          - sensor.unit_power_consumption
+          - sensor.thermal_power
       - type: statistics-graph
         entities:
           - entity: sensor.unit_power_consumption
@@ -118,6 +109,40 @@ views:
         expand_legend: true
     type: masonry
     show_icon_and_title: true
+  - title: Bediening
+    path: bediening
+    icon: mdi:tune
+    cards:
+      - type: entities
+        title: Aan/uit & modus
+        entities:
+          - entity: switch.heatpump_on_off
+          - entity: select.running_mode
+          - entity: select.mode
+      - type: entities
+        title: Temperatuur instellingen
+        entities:
+          - entity: number.temp_set_heating
+          - entity: number.temp_set_floor_heating
+          - entity: number.temp_set_cooling
+          - entity: number.temp_set_hot_water
+          - entity: number.silent_mode_compressor_max_frequency
+          - entity: number.silent_mode_fan_max_frequency
+          - entity: number.electric_heater_allow_start_temp
+      - type: entities
+        title: Stooklijnen (curves)
+        entities:
+          - entity: select.heating_setting_curve
+          - entity: select.underfloor_heating_setting_curve
+          - entity: select.cooling_setting_curve
+          - entity: select.hot_water_setting_curve
+      - type: custom:scheduler-card
+        default_editor: scheme
+        show_header_toggle: true
+      - type: tile
+        entity: number.min_flow_protection
+    type: masonry
+    show_icon_and_title: true
   - title: Temperaturen
     path: temperaturen
     icon: mdi:thermometer
@@ -125,14 +150,14 @@ views:
       - type: entities
         title: Water & omgeving
         entities:
-          - sensor.ambient_temp_t1
-          - sensor.outer_coil_temp_t2
-          - sensor.inner_coil_temp_t3
-          - sensor.water_inlet_temp_t6
-          - sensor.water_outlet_temp_t7
-          - sensor.dhw_tank_temp
-          - sensor.dhw_return_water_temp
-          - sensor.plate_hx_exhaust_temp
+          - entity: sensor.ambient_temp_t1
+          - entity: sensor.outer_coil_temp_t2
+          - entity: sensor.inner_coil_temp_t3
+          - entity: sensor.water_inlet_temp_t6
+          - entity: sensor.water_outlet_temp_t7
+          - entity: sensor.dhw_tank_temp
+          - entity: sensor.dhw_return_water_temp
+          - entity: sensor.plate_hx_exhaust_temp
       - type: entities
         title: Koelcircuit / compressor
         entities:
@@ -176,19 +201,18 @@ views:
         title: Ingestelde temperatuur
     type: masonry
     show_icon_and_title: true
-  - title: Elektrisch & Vermogen
+  - title: Diagnose
     path: elektrisch
-    icon: mdi:flash
+    icon: mdi:folder-wrench-outline
     cards:
       - type: entities
         title: Netaansluiting
         entities:
-          - sensor.ac_input_voltage
-          - sensor.ac_input_current
-          - sensor.unit_input_voltage
-          - sensor.unit_input_current
-          - sensor.unit_input_power
-          - sensor.dc_bus_inverter_voltage
+          - entity: sensor.ac_input_voltage
+          - entity: sensor.ac_input_current
+          - entity: sensor.unit_input_voltage
+          - entity: sensor.unit_input_current
+          - entity: sensor.unit_input_power
       - type: entities
         title: Compressor
         entities:
@@ -209,44 +233,6 @@ views:
         entities:
           - sensor.unit_input_current
           - sensor.unit_power_consumption
-    type: masonry
-    show_icon_and_title: true
-  - title: Bediening
-    path: bediening
-    icon: mdi:tune
-    cards:
-      - type: entities
-        title: Aan/uit & modus
-        entities:
-          - entity: switch.heatpump_on_off
-          - entity: select.running_mode
-          - entity: select.mode
-      - type: entities
-        title: Temperatuur instellingen
-        entities:
-          - entity: number.temp_set_heating
-          - entity: number.temp_set_floor_heating
-          - entity: number.temp_set_cooling
-          - entity: number.temp_set_hot_water
-          - entity: number.silent_mode_compressor_max_frequency
-          - entity: number.silent_mode_fan_max_frequency
-          - entity: number.electric_heater_allow_start_temp
-      - type: entities
-        title: Stooklijnen (curves)
-        entities:
-          - entity: select.heating_setting_curve
-          - entity: select.underfloor_heating_setting_curve
-          - entity: select.cooling_setting_curve
-          - entity: select.hot_water_setting_curve
-      - type: custom:scheduler-card
-        default_editor: scheme
-        show_header_toggle: true
-    type: masonry
-    show_icon_and_title: true
-  - title: Diagnostiek
-    path: diagnostiek
-    icon: mdi:wrench-cog
-    cards:
       - type: entities
         title: Mechaniek
         entities:
@@ -261,6 +247,20 @@ views:
           - entity: sensor.refrigerant_type
           - entity: binary_sensor.running_status_fault_alarm
           - entity: sensor.unit_power_consumption
+      - type: statistics-graph
+        entities:
+          - sensor.water_flow
+        title: Water flow
+        days_to_show: 1
+        period: hour
+        chart_type: line
+        stat_types:
+          - mean
+          - min
+          - max
+        hide_legend: false
+        expand_legend: false
+        logarithmic_scale: false
     type: masonry
     show_icon_and_title: true
   - title: Storingen
@@ -344,18 +344,221 @@ views:
             name: Omgevingstemp. te laag
     type: masonry
     show_icon_and_title: true
-  - type: custom:vertical-layout
-    cards:
-      - type: gauge
-        entity: sensor.warmtepomp_klimaat_setpoint
-        name: Warm water setpoint
-        needle: true
-        min: 0
-        max: 80
-      - type: gauge
-        entity: sensor.warmtepomp_klimaat_setpoint
-        name: Klimaat setpoint
-        needle: true
-        min: 0
-        max: 80
-    title: estra
+  - type: sections
+    max_columns: 4
+    title: fouten
+    path: fouten
+    show_icon_and_title: true
+    sections:
+      - type: grid
+        cards: []
+      - type: grid
+        cards:
+          - square: false
+            type: grid
+            cards:
+              - type: tile
+                entity: binary_sensor.error_wrong_phase
+                name: Verkeerde fase
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_missing_phase
+                name: Fase ontbreekt
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_communication_failure
+                name: Communicatie
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_water_flow_failure
+                name: Waterdoorstroming
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_low_water_flow
+                name: Lage doorstroming
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_water_pump_1_failure
+                name: Waterpomp 1
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_water_pump_2_failure
+                name: Waterpomp 2
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_water_tank_temp_sensor_failure
+                name: Tank sensor
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_water_inlet_temp_sensor_failure
+                name: Inlaat sensor
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_water_outlet_temp_sensor_failure
+                name: Uitlaat sensor
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_water_outlet_temp_too_high_in_heating_mode
+                name: Uitlaat te heet
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_large_temp_difference_water_inlet_outlet
+                name: Groot verschil in/uit
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_ambient_temp_too_low
+                name: Omgeving te koud
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_high_pressure_switch_failure
+                name: Hogedrukschakelaar
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_low_pressure_switch_failure
+                name: Lagedrukschakelaar
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_high_pressure_too_high
+                name: Hoge druk te hoog
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_exhaust_pressure_too_high
+                name: Persdruk te hoog
+                vertical: true
+              - type: tile
+                entity: binary_sensor.error_fan_failure
+                name: Ventilator
+                vertical: true
+            grid_options:
+              columns: 36
+              rows: auto
+            columns: 5
+            title: Fouten
+        column_span: 4
+        background:
+          color: red
+          opacity: 50
+  - type: sections
+    max_columns: 4
+    title: Stooklijnen
+    path: stooklijnen
+    sections:
+      - type: grid
+        column_span: 4
+        cards:
+          - type: entities
+            title: Gevolgde stooklijn
+            entities:
+              - entity: select.heating_setting_curve
+                name: Gekozen curve
+              - entity: sensor.unit_temperature_control_mode
+                name: Regelt op (P116)
+              - entity: sensor.ambient_temp_t1
+                name: Buitentemp. (T1)
+              - entity: sensor.heating_curve_target
+                name: Doeltemp. volgens curve
+              - entity: sensor.actual_controlled_water_temp
+                name: Actuele geregelde temp.
+              - entity: sensor.water_inlet_temp_t6
+                name: Inlaattemp. (T6)
+              - entity: sensor.water_outlet_temp_t7
+                name: Uitlaattemp. (T7)
+          - type: conditional
+            conditions:
+              - entity: select.heating_setting_curve
+                state_not: 'Off'
+            card:
+              type: custom:apexcharts-card
+              header:
+                title: Stooklijn (huidige selectie)
+                show: true
+              chart_type: line
+              apex_config:
+                xaxis:
+                  type: numeric
+                  sorted: true
+                  tickAmount: 8
+                  title:
+                    text: Buitentemperatuur (°C)
+                  labels:
+                    rotate: -90
+                    style:
+                      fontSize: 10px
+                yaxis:
+                  tickAmount: 8
+                  title:
+                    text: Doel water-uitlaattemp. (°C)
+                tooltip:
+                  x:
+                    formatter: function(value) { return value + ' °C'; }
+                stroke:
+                  curve: stepline
+                  width: 2
+              series:
+                - entity: sensor.heating_curve_target
+                  name: Stooklijn
+                  type: line
+                  color: '#0AF'
+                  data_generator: >
+                    const points = entity.attributes.curve_points || [];
+
+                    if (points.length === 0) return [];
+
+                    const result = [];
+
+                    points.forEach((p) => {
+                      // Eén punt per bucket, op de ondergrens van dat bereik. Bij een
+                      // open ondergrens ("<X", laagste bucket) benaderen we die met
+                      // 8 graden extra voor de weergave. stroke.curve: stepline
+                      // tekent zelf de horizontale-dan-verticale trapvorm tussen
+                      // opeenvolgende punten — dus GEEN dubbele grenspunten hier,
+                      // anders ontstaan er dubbele/blokkerige sprongen.
+                      const xStart = p.ambient_from !== null ? p.ambient_from : (p.ambient_to !== null ? p.ambient_to - 8 : -25);
+                      result.push({x: `${xStart}`, y: p.target_temp});
+                    });
+
+                    // Sluit de trap af aan de rechterkant (hoogste bucket, open
+
+                    // bovengrens) met een laatste punt op dezelfde hoogte.
+
+                    const highest = Math.max(...points.map(p => p.ambient_from
+                    !== null ? p.ambient_from : -999));
+
+                    const highestBucket = points.find(p => p.ambient_from ===
+                    highest);
+
+                    if (highestBucket) {
+                      const xEnd = highestBucket.ambient_from + 8;
+                      result.push({x: `${xEnd}`, y: highestBucket.target_temp});
+                    }
+
+                    // Sorteer expliciet op X (laag naar hoog), zodat negatieve
+
+                    // temperaturen altijd links op de as beginnen, ongeacht de
+
+                    // volgorde waarin de curve-buckets in de tabel staan.
+
+                    result.sort((a, b) => parseFloat(a.x) - parseFloat(b.x));
+
+                    return result;
+                - entity: sensor.actual_controlled_water_temp
+                  name: Huidig punt
+                  type: line
+                  color: '#F00'
+                  data_generator: |
+                    const ambient = entity.attributes.ambient_temp;
+                    const target = parseFloat(entity.state);
+                    if (ambient === null || isNaN(target)) return [];
+                    return [{x: `${ambient}`, y: target}];
+          - type: conditional
+            conditions:
+              - entity: select.heating_setting_curve
+                state: 'Off'
+            card:
+              type: markdown
+              content: >
+                ### Stooklijn (huidige selectie)
+
+                Geen stooklijn actief — de curve-selectie staat op **Off**. Zet
+                `select.heating_setting_curve` op een curve (H1-H8/L1-L8) om de
+                bijbehorende grafiek hier te zien.

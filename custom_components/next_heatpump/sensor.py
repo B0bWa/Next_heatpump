@@ -40,6 +40,10 @@ async def async_setup_entry(
     entities.append(NextCOPSensor(coordinator))
     entities.append(NextCalculatedPowerSensor(coordinator))
     entities.append(NextRefrigerantSensor(coordinator))
+    entities.append(NextVersionSensor(coordinator, "Program Version", 0x0360, "mdi:chip"))
+    entities.append(NextProductTypeSensor(coordinator))
+    entities.append(NextProductTypeIdSensor(coordinator))
+    entities.append(NextVersionSensor(coordinator, "Protocol Version", 0x0363, "mdi:transit-connection-variant"))
 
     async_add_entities(entities)
 
@@ -115,8 +119,8 @@ class NextThermalPowerSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data
         try:
             flow = float(data.get("Water Flow") or 0)
-            t_in = float(data.get("Water Inlet Temp T6") or 0)
-            t_out = float(data.get("Water Outlet Temp T7") or 0)
+            t_in = float(data.get("Water Inlet Temp. T6") or 0)
+            t_out = float(data.get("Water Outlet Temp. T7") or 0)
             delta_t = t_out - t_in
             thermal_kw = flow * delta_t * 4.186 / 60
             return round(thermal_kw, 2)
@@ -150,8 +154,8 @@ class NextCOPSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data
         try:
             flow = float(data.get("Water Flow") or 0)
-            t_in = float(data.get("Water Inlet Temp T6") or 0)
-            t_out = float(data.get("Water Outlet Temp T7") or 0)
+            t_in = float(data.get("Water Inlet Temp. T6") or 0)
+            t_out = float(data.get("Water Outlet Temp. T7") or 0)
             electrical_kw = float(data.get("Unit Input Power") or 0)
             if electrical_kw <= 0:
                 return None
@@ -187,8 +191,8 @@ class NextCalculatedPowerSensor(CoordinatorEntity, SensorEntity):
     def native_value(self) -> float | None:
         data = self.coordinator.data
         try:
-            voltage = float(data.get("Supply Line Voltage") or 0)
-            current = float(data.get("Compressor Current Draw") or 0)
+            voltage = float(data.get("AC Input Voltage") or 0)
+            current = float(data.get("Compressor Phase Current") or 0)
             if voltage <= 0:
                 return None
             return round(voltage * current, 1)
@@ -226,6 +230,117 @@ class NextRefrigerantSensor(CoordinatorEntity, SensorEntity):
         return {
             "temperature_scale": self.coordinator.data.get("Temperature Scale"),
             "p119_register": "0x0177",
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
+        }
+
+
+class NextVersionSensor(CoordinatorEntity, SensorEntity):
+    """Program Version (0x0360) / Protocol Version (0x0363).
+
+    Statische, read-only firmware-/protocolversie ("V1.00"-notatie, zie
+    const.py voor de formattering). Verandert alleen na een firmware-update
+    van het toestel.
+    """
+
+    def __init__(self, coordinator, key: str, address: int, icon: str):
+        super().__init__(coordinator)
+        self._key = key
+        self._raw_key = f"{key} Raw"
+        self._address = address
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{address:04X}"
+        self._attr_name = key
+        self._attr_native_unit_of_measurement = None
+        self._attr_device_class = None
+        self._attr_state_class = None
+        self._attr_icon = icon
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get(self._key)
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "raw_value": self.coordinator.data.get(self._raw_key),
+            "register": f"0x{self._address:04X}",
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
+        }
+
+
+class NextProductTypeSensor(CoordinatorEntity, SensorEntity):
+    """Product Type (0x0361) — zie PRODUCT_TYPE_MAP in const.py."""
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_0361"
+        self._attr_name = "Product Type"
+        self._attr_native_unit_of_measurement = None
+        self._attr_device_class = None
+        self._attr_state_class = None
+        self._attr_icon = "mdi:information-outline"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("Product Type")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "raw_value": self.coordinator.data.get("Product Type Raw"),
+            "register": "0x0361",
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
+        }
+
+
+class NextProductTypeIdSensor(CoordinatorEntity, SensorEntity):
+    """Product Type ID Number (0x0362) — betekenis hangt af van Product Type
+    (0x0361), zie PRODUCT_TYPE_ID_MAP in const.py (incl. een gevlagde
+    inconsistentie in de manual bij Product Type=2).
+    """
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_0362"
+        self._attr_name = "Product Type ID Number"
+        self._attr_native_unit_of_measurement = None
+        self._attr_device_class = None
+        self._attr_state_class = None
+        self._attr_icon = "mdi:identifier"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("Product Type ID Number")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "raw_value": self.coordinator.data.get("Product Type ID Number Raw"),
+            "product_type": self.coordinator.data.get("Product Type"),
+            "register": "0x0362",
         }
 
     @property

@@ -28,6 +28,8 @@ from .const import (
     SILENT_MODE_REGISTERS,
     ELECTRIC_HEATER_REGISTERS,
     VERSION_INFO_START_REGISTER,
+    CONTROL_MODE_REGISTER,
+    CONTROL_MODE_OPTIONS,
     PRODUCT_TYPE_MAP,
     PRODUCT_TYPE_ID_MAP,
 )
@@ -533,6 +535,17 @@ class NextCoordinator(DataUpdateCoordinator):
                 else:
                     rev = {v: k for k, v in options_map.items()}
                     data[name] = rev.get(raw, f"Unknown ({raw})")
+
+            # ── P116 Unit Temperature Control Mode (alleen-lezen) ──
+            # Bewust GEEN onderdeel van SELECT_REGISTERS: dit is een
+            # fabrieksparameter (zie const.py voor de toelichting), dus
+            # hier los uitgelezen en als platte waarde opgeslagen i.p.v.
+            # via het schrijfbare select-mechanisme.
+            raw = self._read_one(CONTROL_MODE_REGISTER)
+            if raw is None:
+                data["Unit Temperature Control Mode"] = None
+            else:
+                data["Unit Temperature Control Mode"] = CONTROL_MODE_OPTIONS.get(raw, f"Unknown ({raw})")
 
             if self._implausible_count:
                 _LOGGER.info(

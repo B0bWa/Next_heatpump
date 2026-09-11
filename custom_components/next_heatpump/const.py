@@ -3,7 +3,7 @@
 DOMAIN = "next_heatpump"
 DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1
-DEFAULT_SCAN_INTERVAL = 45
+DEFAULT_SCAN_INTERVAL = 30
 
 # ─────────────────────────────────────────────
 # Register definitions — adressen gebaseerd op HHI Modbus repo v2.2
@@ -95,9 +95,9 @@ STATUS_BITS = [
 
 ERROR_STATUS_1_REGISTER = 0x0002
 ERROR_STATUS_1_BITS = [
-    (0x0001, "Error: Wrong Phase"),
+    (0x0001, "Error: Wrong Phase E01"),
     (0x0002, "Error: Missing Phase"),
-    (0x0004, "Error: Water Flow Failure"),
+    (0x0004, "Error: Water Flow Failure E03"),
     (0x0008, "Error: Communication Failure"),
     (0x0040, "Error: Water Tank Temp. Sensor Failure"),
     (0x0080, "Error: Water Inlet Temp. Sensor Failure"),
@@ -143,6 +143,14 @@ NUMBER_REGISTERS = [
     (0x0301, "Temp. Set Heating",       "°C", "temperature", 20, 60, 1),
     (0x0302, "Temp.Set Hot Water",     "°C", "temperature", 20, 75, 1),
     (0x0303, "Temp. Set Floor Heating", "°C", "temperature", 20, 60, 1),
+    # Fabrieksparameter (handleiding hfst. "Factory Parameter 0x0200-0x03FF"):
+    # "Low protection value - Water flow rate" — minimaal doorstromingsdebiet
+    # waaronder de flow-beveiliging aanslaat. Voorzichtig mee zijn: te hoog
+    # instellen kan de beveiliging onterecht laten aanslaan bij normaal
+    # bedrijf; te laag instellen vermindert de beveiliging tegen te weinig
+    # waterdoorstroming (risico op bevriezing/ooverhitting van de
+    # warmtewisselaar).
+    (0x0186, "Min Flow Protection",     "L/min", None, 0, 100, 1),
 ]
 
 # ON/OFF switch register, 0=off, 1=on
@@ -319,3 +327,78 @@ PRODUCT_TYPE_ID_MAP = {
     1: {0: "Domestic inverter unit"},
     2: {0: "Commercial inverter unit"},
 }
+
+# ─────────────────────────────────────────────
+# Stooklijnen (weersafhankelijke regeling) — handleiding hfst. 4.1.1
+# "Heating Curves". Elke curve is een lijst van
+# (min_incl, max_excl, water_uitlaattemp) — min/max=None betekent "geen
+# ondergrens" resp. "geen bovengrens" (komt overeen met "≥X" en "<X" in de
+# tabel). Bij lookup: eerste bucket waar min <= T < max (met None als
+# wildcard) geldt.
+#
+# H1-H8 = "HH"-curves (Hoge temperatuur voor verwarming, blz. 143)
+# L1-L8 = "HL"-curves (Lage temperatuur voor verwarming, blz. 144)
+# Curve 4 en 6 zijn door de fabrikant aangemerkt als ECO-energiebesparende
+# curves (zie noot onder beide tabellen in de manual).
+# ─────────────────────────────────────────────
+
+HEATING_CURVES = {
+    "H1": [(16, None, 50), (8, 16, 51), (0, 8, 52), (-8, 0, 53), (-16, -8, 54), (None, -16, 55)],
+    "H2": [(17, None, 45), (14, 17, 46), (10, 14, 47), (6, 10, 48), (2, 6, 49), (-2, 2, 50),
+           (-6, -2, 51), (-10, -6, 52), (-14, -10, 53), (-20, -14, 54), (None, -20, 55)],
+    "H3": [(16, None, 45), (8, 16, 46), (0, 8, 47), (-8, 0, 48), (-16, -8, 49), (None, -16, 50)],
+    # H4 = ECO energy saving curve (zie manual-noot)
+    "H4": [(19, None, 40), (16, 19, 41), (13, 16, 42), (10, 13, 43), (7, 10, 44), (4, 7, 45),
+           (1, 4, 46), (-2, 1, 47), (-5, -2, 48), (-8, -5, 49), (-10, -8, 50), (-12, -10, 51),
+           (-14, -12, 52), (-16, -14, 53), (-18, -16, 54), (None, -18, 55)],
+    "H5": [(17, None, 40), (14, 17, 41), (10, 14, 42), (6, 10, 43), (2, 6, 44), (-2, 2, 45),
+           (-6, -2, 46), (-10, -6, 47), (-14, -10, 48), (-20, -14, 49), (None, -20, 50)],
+    # H6 = ECO energy saving curve (zie manual-noot)
+    "H6": [(16, None, 40), (8, 16, 41), (0, 8, 42), (-8, 0, 43), (-16, -8, 44), (None, -16, 45)],
+    "H7": [(17, None, 35), (14, 17, 36), (10, 14, 37), (6, 10, 38), (2, 6, 39), (-2, 2, 40),
+           (-6, -2, 41), (-10, -6, 42), (-14, -10, 43), (-20, -14, 44), (None, -20, 45)],
+    "H8": [(16, None, 35), (8, 16, 36), (0, 8, 37), (-8, 0, 38), (-16, -8, 39), (None, -16, 40)],
+
+    "L1": [(18, None, 32), (9, 18, 33), (4, 9, 34), (-3, 4, 35), (-10, -3, 36), (-16, -10, 37),
+           (None, -16, 38)],
+    "L2": [(16, None, 30), (8, 16, 31), (0, 8, 32), (-8, 0, 33), (-16, -8, 34), (None, -16, 35)],
+    "L3": [(14, None, 30), (0, 14, 31), (-14, 0, 32), (None, -14, 33)],
+    # LET OP: in de manual ontbreekt het bereik 8≤T<13 voor curve L4 (springt
+    # direct van "13≤T<18" naar "6≤T<8") — vermoedelijk een druk-/OCR-fout in
+    # het brondocument. Letterlijk overgenomen; T tussen 8 en 13°C valt hier
+    # tussen wal en schip (lookup geeft dan None terug). Verifieer dit tegen
+    # je eigen papieren handleiding als je vaak in dat bereik zit.
+    "L4": [(18, None, 28), (13, 18, 29), (6, 8, 30), (0, 6, 31), (-5, 0, 32), (-9, -5, 33),
+           (-16, -9, 34), (None, -16, 35)],
+    "L5": [(16, None, 28), (8, 16, 29), (0, 8, 30), (-8, 0, 31), (-16, -8, 32), (None, -16, 33)],
+    "L6": [(16, None, 26), (8, 16, 27), (0, 8, 28), (-8, 0, 29), (-16, -8, 30), (None, -16, 31)],
+    "L7": [(14, None, 26), (0, 14, 27), (-14, 0, 28), (None, -14, 29)],
+    "L8": [(16, None, 24), (8, 16, 25), (0, 8, 26), (-8, 0, 27), (-16, -8, 28), (None, -16, 29)],
+}
+
+
+def get_heating_curve_target(curve_name: str, ambient_temp: float):
+    """Zoek de doel-water-uitlaattemperatuur op voor een gegeven stooklijn
+    en buitentemperatuur. Retourneert None als de curve onbekend is, of als
+    de temperatuur in een lacune van de tabel valt (zie noot bij L4)."""
+    buckets = HEATING_CURVES.get(curve_name)
+    if not buckets:
+        return None
+    for min_incl, max_excl, target in buckets:
+        if (min_incl is None or ambient_temp >= min_incl) and (max_excl is None or ambient_temp < max_excl):
+            return target
+    return None
+
+
+# ─────────────────────────────────────────────
+# P116 "Unit Temperature Control Mode" (register 0x0174, manual hfst. 2.8) —
+# bewust GEEN SELECT_REGISTERS-entry (dus niet als schrijfbare dropdown in
+# HA). Dit is een fabrieksparameter die intern bepaalt of de unit regelt op
+# de water-INLET (T6) of water-OUTLET (T7) temperatuur; het toont als een
+# schrijfbare 'select' in HA suggereert ten onrechte dat je hier gewoon
+# tussen kunt kiezen zoals bij Mode/Running Mode. Wordt daarom als
+# alleen-lezen sensor uitgelezen (zie coordinator.py/sensor.py) — wie 'm
+# toch wil wijzigen doet dat bewust via het display, niet per ongeluk
+# vanuit dit dashboard.
+CONTROL_MODE_REGISTER = 0x0174
+CONTROL_MODE_OPTIONS = {0: "Inlet (T6)", 1: "Outlet (T7)"}

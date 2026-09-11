@@ -12,3 +12,5 @@
 
 <img width="1000" height="700" alt="{B85A5F6C-B42E-474A-A2F4-C22D2E9B1936}" src="https://github.com/user-attachments/assets/1792cca5-8070-4962-ae59-a53fee76bec7" />
 
+11-09-2024 stooklijnen:
+<img width="1000" height="700" alt="{6A4008E7-761C-4675-B841-360305EDC7EB}" src="https://github.com/user-attachments/assets/1a66dfde-84f9-4372-8cef-cb7b3188c575" />

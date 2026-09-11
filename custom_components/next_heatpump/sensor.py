@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SENSOR_REGISTERS
+from .const import DOMAIN, SENSOR_REGISTERS, get_heating_curve_target
 from .coordinator import NextCoordinator
 
 
@@ -40,6 +40,9 @@ async def async_setup_entry(
     entities.append(NextCOPSensor(coordinator))
     entities.append(NextCalculatedPowerSensor(coordinator))
     entities.append(NextRefrigerantSensor(coordinator))
+    entities.append(NextHeatingCurveTargetSensor(coordinator))
+    entities.append(NextActualControlledTempSensor(coordinator))
+    entities.append(NextControlModeSensor(coordinator))
     entities.append(NextVersionSensor(coordinator, "Program Version", 0x0360, "mdi:chip"))
     entities.append(NextProductTypeSensor(coordinator))
     entities.append(NextProductTypeIdSensor(coordinator))
@@ -230,6 +233,143 @@ class NextRefrigerantSensor(CoordinatorEntity, SensorEntity):
         return {
             "temperature_scale": self.coordinator.data.get("Temperature Scale"),
             "p119_register": "0x0177",
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
+        }
+
+
+class NextControlModeSensor(CoordinatorEntity, SensorEntity):
+    """P116 Unit Temperature Control Mode (register 0x0174) — alleen-lezen.
+
+    Bewust een sensor en GEEN select: dit is een fabrieksparameter die
+    bepaalt of de unit op T6 (inlet) of T7 (outlet) regelt. Een select-
+    entiteit suggereert ten onrechte dat dit een routinematige keuze is
+    zoals Mode/Running Mode — vandaar hier alleen-lezen weergegeven.
+    """
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_control_mode"
+        self._attr_name = "Unit Temperature Control Mode"
+        self._attr_native_unit_of_measurement = None
+        self._attr_device_class = None
+        self._attr_state_class = None
+        self._attr_icon = "mdi:tune-variant"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("Unit Temperature Control Mode")
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
+        }
+
+
+class NextActualControlledTempSensor(CoordinatorEntity, SensorEntity):
+    """Geeft altijd de watertemperatuur terug die de unit daadwerkelijk als
+    regelreferentie gebruikt: T6 (inlet) of T7 (outlet), afhankelijk van de
+    live waarde van P116 "Unit Temperature Control Mode" (register 0x0174,
+    zie manual hfst. 2.8). Zo hoeft de rest van het dashboard (o.a. de
+    stooklijn-vergelijking) niet zelf te kiezen tussen T6/T7 — dat kan
+    immers per installatie (of na een parameterwijziging) verschillen.
+    """
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_actual_controlled_temp"
+        self._attr_name = "Actual Controlled Water Temp"
+        self._attr_native_unit_of_measurement = "°C"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:thermometer-check"
+
+    @property
+    def native_value(self):
+        data = self.coordinator.data
+        mode = data.get("Unit Temperature Control Mode")
+        if mode == "Inlet (T6)":
+            return data.get("Water Inlet Temp. T6")
+        # Standaard/onbekend: Outlet (T7) — dit is ook de fabrieksdefault
+        # (P116=1) volgens de manual, dus de veiligste fallback als de
+        # modus-waarde onverwacht leeg/anders is.
+        return data.get("Water Outlet Temp. T7")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "control_mode": self.coordinator.data.get("Unit Temperature Control Mode"),
+            "ambient_temp": self.coordinator.data.get("Ambient Temp. T1"),
+        }
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self.coordinator.config_entry.entry_id)},
+            "name": "",
+            "manufacturer": "Heative",
+            "model": "",
+        }
+
+
+class NextHeatingCurveTargetSensor(CoordinatorEntity, SensorEntity):
+    """Doel-water-uitlaattemperatuur volgens de gekozen stooklijn
+    (select.heating_setting_curve) en de actuele buitentemperatuur (T1).
+
+    Gebruikt de HH1-8/HL1-8 tabellen uit de manual (hfst. 4.1.1), zie
+    HEATING_CURVES in const.py. De volledige curve (alle breekpunten) wordt
+    als attribuut meegegeven zodat je 'm desgewenst als grafiek kunt tonen
+    (bijv. met een custom kaart), naast de huidige doelwaarde zelf.
+    """
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_heating_curve_target"
+        self._attr_name = "Heating Curve Target"
+        self._attr_native_unit_of_measurement = "°C"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:chart-bell-curve-cumulative"
+
+    @property
+    def native_value(self):
+        data = self.coordinator.data
+        curve_name = data.get("Heating Setting Curve")
+        ambient = data.get("Ambient Temp. T1")
+        if curve_name is None or ambient is None:
+            return None
+        try:
+            return get_heating_curve_target(curve_name, float(ambient))
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def extra_state_attributes(self):
+        from .const import HEATING_CURVES
+        curve_name = self.coordinator.data.get("Heating Setting Curve")
+        points = HEATING_CURVES.get(curve_name, [])
+        return {
+            "curve": curve_name,
+            "ambient_temp": self.coordinator.data.get("Ambient Temp. T1"),
+            # Breekpunten als (buitentemp_ondergrens, doeltemp) — bruikbaar
+            # om de volledige curve te plotten. De laatste (open) bucket
+            # gebruikt de min-waarde van de voorlaatste bucket min 1 als
+            # benaderde x-as-ondergrens voor weergavedoeleinden.
+            "curve_points": [
+                {"ambient_from": p[0], "ambient_to": p[1], "target_temp": p[2]}
+                for p in points
+            ],
         }
 
     @property

@@ -109,6 +109,12 @@ views:
         expand_legend: true
     type: masonry
     show_icon_and_title: true
+    background:
+      opacity: 33
+      alignment: center
+      size: cover
+      repeat: repeat
+      attachment: fixed
   - title: Bediening
     path: bediening
     icon: mdi:tune
@@ -346,100 +352,6 @@ views:
     show_icon_and_title: true
   - type: sections
     max_columns: 4
-    title: fouten
-    path: fouten
-    show_icon_and_title: true
-    sections:
-      - type: grid
-        cards: []
-      - type: grid
-        cards:
-          - square: false
-            type: grid
-            cards:
-              - type: tile
-                entity: binary_sensor.error_wrong_phase
-                name: Verkeerde fase
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_missing_phase
-                name: Fase ontbreekt
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_communication_failure
-                name: Communicatie
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_water_flow_failure
-                name: Waterdoorstroming
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_low_water_flow
-                name: Lage doorstroming
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_water_pump_1_failure
-                name: Waterpomp 1
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_water_pump_2_failure
-                name: Waterpomp 2
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_water_tank_temp_sensor_failure
-                name: Tank sensor
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_water_inlet_temp_sensor_failure
-                name: Inlaat sensor
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_water_outlet_temp_sensor_failure
-                name: Uitlaat sensor
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_water_outlet_temp_too_high_in_heating_mode
-                name: Uitlaat te heet
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_large_temp_difference_water_inlet_outlet
-                name: Groot verschil in/uit
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_ambient_temp_too_low
-                name: Omgeving te koud
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_high_pressure_switch_failure
-                name: Hogedrukschakelaar
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_low_pressure_switch_failure
-                name: Lagedrukschakelaar
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_high_pressure_too_high
-                name: Hoge druk te hoog
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_exhaust_pressure_too_high
-                name: Persdruk te hoog
-                vertical: true
-              - type: tile
-                entity: binary_sensor.error_fan_failure
-                name: Ventilator
-                vertical: true
-            grid_options:
-              columns: 36
-              rows: auto
-            columns: 5
-            title: Fouten
-        column_span: 4
-        background:
-          color: red
-          opacity: 50
-  - type: sections
-    max_columns: 4
     title: Stooklijnen
     path: stooklijnen
     sections:
@@ -485,9 +397,14 @@ views:
                     style:
                       fontSize: 10px
                 yaxis:
-                  tickAmount: 8
-                  title:
-                    text: Doel water-uitlaattemp. (°C)
+                  - seriesName: Stooklijn
+                    tickAmount: 8
+                    title:
+                      text: Doel water-uitlaattemp. (°C)
+                  - seriesName: Huidig punt
+                    show: false
+                    min: 0
+                    max: 100
                 tooltip:
                   x:
                     formatter: function(value) { return value + ' °C'; }

@@ -21,7 +21,6 @@ from .const import (
     ENERGY_REGISTER,
     REFRIGERANT_REGISTER,
     REFRIGERANT_TYPES,
-    get_temperature_scale,
     FORCE_CONTROL_REGISTER,
     FORCE_CONTROL_BITS,
     FORCE_VALUE_REGISTERS,
@@ -61,10 +60,6 @@ BURST_COOLDOWN = 8.0  # seconden
 # Ruim onder de Modbus-limiet van 125, en klein genoeg om een batch op
 # 9600 bd nog in een fractie van een seconde te versturen/ontvangen.
 MAX_BATCH_SIZE = 32
-
-# Registers die een temperatuur zijn (device_class == "temperature")
-# Schaling wordt bepaald door P119 koelmiddeltype
-TEMPERATURE_DEVICE_CLASS = "temperature"
 
 
 def _to_signed(value: int) -> int:
@@ -138,9 +133,6 @@ class NextCoordinator(DataUpdateCoordinator):
         # Aantal opeenvolgende volledig mislukte registers/batches — de
         # circuit breaker voor busbezetting (zie _register_failure).
         self._consecutive_failures = 0
-        self.refrigerant_type: int | None = None
-        self.refrigerant_name: str = "Unknown"
-        self.temperature_scale: float = 1.0  # default R32
         super().__init__(
             hass, _LOGGER, name=DOMAIN,
             update_interval=timedelta(seconds=scan_interval),
@@ -346,13 +338,17 @@ class NextCoordinator(DataUpdateCoordinator):
         return None
 
     def _apply_scale(self, spec: tuple, raw: int | None):
-        """Pas signed-conversie en schaling toe, zoals voorheen in _fetch_all."""
+        """Pas signed-conversie en schaling toe, zoals voorheen in _fetch_all.
+
+        Deze integratie is uitsluitend bedoeld voor de R290-uitvoering, dus
+        er wordt niet meer per koelmiddeltype vertakt — elk register
+        gebruikt gewoon zijn eigen, vast gedefinieerde schaling.
+        """
         address, name, unit, device_class, scale, signed, min_val, max_val = spec
         if raw is None:
             return None
         value = _to_signed(raw) if signed else raw
-        effective_scale = self.temperature_scale if device_class == TEMPERATURE_DEVICE_CLASS else scale
-        return round(value * effective_scale, 1) if effective_scale != 1 else value
+        return round(value * scale, 1) if scale != 1 else value
 
     def _read_sensor_run(self, run: list[tuple], data: dict) -> None:
         """Lees één aaneengesloten reeks SENSOR_REGISTERS in één batch-call
@@ -386,32 +382,617 @@ class NextCoordinator(DataUpdateCoordinator):
 
             data[name] = self._apply_scale(spec, raw)
 
-    def _detect_refrigerant(self) -> None:
-        """Lees P119 (0x0177) en stel temperatuurschaling in.
+    async def _async_update_data(self) -> dict:
+        try:
+            return await self.hass.async_add_executor_job(self._fetch_all)
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with heatpump: {err}") from err
 
-        Wordt éénmalig uitgevoerd bij de eerste poll.
-        R32  (2) → ×1.0  (directe °C waarden)
-        R290 (3) → ×0.1  (raw/10 = °C)
-        R410A(1) → ×1.0  (aanname gelijk aan R32)
-        """
-        raw = self._read_one(REFRIGERANT_REGISTER)
-        if raw is None:
-            _LOGGER.warning(
-                "P119 (0x0177) kon niet worden uitgelezen — "
-                "standaard temperatuurschaling ×1 (R32) wordt gebruikt"
+    def _fetch_all(self) -> dict:
+        data: dict = {}
+        # Reset de teller voor implausibele waarden aan het begin van elke cyclus.
+        self._implausible_count = 0
+        # Bewust NIET self._consecutive_failures resetten aan het begin van de
+        # cyclus — een busbotsing kan precies op de overgang tussen twee
+        # cycli vallen, en dan willen we die telling laten doorlopen.
+        try:
+            # ── Koelmiddeltype (alleen ter informatie) ──
+            # Deze integratie is uitsluitend bedoeld voor de R290-uitvoering,
+            # dus er wordt niet meer per koelmiddeltype vertakt/geschaald —
+            # het register wordt alleen nog uitgelezen en getoond ter
+            # referentie/verificatie (bijv. om te bevestigen dat de unit
+            # daadwerkelijk R290 rapporteert).
+            raw = self._read_one(REFRIGERANT_REGISTER)
+            data["Refrigerant Type"] = REFRIGERANT_TYPES.get(raw, f"Unknown ({raw})") if raw is not None else None
+
+            # ── Compressor target frequency ──
+            raw = self._read_one(0x0027)
+            data["Compressor Target Frequency"] = raw
+
+            # ── Sensor registers — in aaneengesloten batches i.p.v. één
+            #    Modbus-call per register (zie _SENSOR_RUNS hierboven) ──
+            for run in _SENSOR_RUNS:
+                self._read_sensor_run(run, data)
+
+            # ── Energy register (single 16-bit, value directly in kWh) ──
+            raw = self._read_one(ENERGY_REGISTER)
+            data["Unit Power Consumption"] = float(raw) if raw is not None else None
+
+            # ── Version Information 0x0360~0x0363 (aaneengesloten batch) ──
+            # Program Version, Product Type, Product Type ID Number, Protocol
+            # Version — allemaal read-only, statisch (verandert alleen bij een
+            # firmware-update). Zie const.py voor de uitleg van de mapping/
+            # formattering, inclusief een gevlagde inconsistentie in de manual.
+            version_values = self._read_range(VERSION_INFO_START_REGISTER, 4)
+            if version_values is not None:
+                prog_ver_raw, prod_type_raw, prod_type_id_raw, proto_ver_raw = version_values
+            else:
+                prog_ver_raw = prod_type_raw = prod_type_id_raw = proto_ver_raw = None
+
+            def _format_version(raw_val: int | None) -> str | None:
+                if raw_val is None:
+                    return None
+                return f"V{raw_val // 100}.{raw_val % 100:02d}"
+
+            data["Program Version"] = _format_version(prog_ver_raw)
+            data["Program Version Raw"] = prog_ver_raw
+            data["Protocol Version"] = _format_version(proto_ver_raw)
+            data["Protocol Version Raw"] = proto_ver_raw
+
+            data["Product Type Raw"] = prod_type_raw
+            data["Product Type"] = (
+                PRODUCT_TYPE_MAP.get(prod_type_raw, f"Unknown ({prod_type_raw})")
+                if prod_type_raw is not None else None
             )
-            return
 
-        self.refrigerant_type = raw
-        self.refrigerant_name = REFRIGERANT_TYPES.get(raw, f"Unknown ({raw})")
-        self.temperature_scale = get_temperature_scale(raw)
+            data["Product Type ID Number Raw"] = prod_type_id_raw
+            if prod_type_raw is not None and prod_type_id_raw is not None:
+                id_map = PRODUCT_TYPE_ID_MAP.get(prod_type_raw, {})
+                data["Product Type ID Number"] = id_map.get(
+                    prod_type_id_raw,
+                    f"Unknown (type={prod_type_raw}, id={prod_type_id_raw})",
+                )
+            else:
+                data["Product Type ID Number"] = None
 
-        _LOGGER.info(
-            "Koelmiddeltype gedetecteerd: %s (P119=%d) — temperatuurschaling: ×%s",
-            self.refrigerant_name,
-            raw,
-            self.temperature_scale,
+            # ── Status-/foutregisters — meerdere bitmask-registers ──
+            # STATUS_REGISTERS bundelt (register_adres, bits_lijst)-paren:
+            # het "Running Status"-register (0x0000) plus de losse
+            # foutregisters (Error Status 1/2, System1 Error Status 1).
+            # Elk register wordt apart uitgelezen; de bits erin worden
+            # gedecodeerd tot de bijbehorende binary_sensor-entiteiten.
+            for reg_address, bits in STATUS_REGISTERS:
+                raw_status = self._read_one(reg_address)
+                for mask, bit_name in bits:
+                    data[bit_name] = bool(raw_status & mask) if raw_status is not None else None
+
+            # ── Load Forcing-bits (geforceerde besturing compressor/ventilator) ──
+            # Register 0x0331 — zie const.py voor uitleg. Alleen gebruikt om de
+            # switch-status te tonen; het schrijven zelf gaat via
+            # write_bit(), dat de registerwaarde vlak vóór het schrijven vers
+            # opnieuw leest (deze gecachte pollwaarde kan tot scan_interval
+            # seconden oud zijn).
+            raw_force = self._read_one(FORCE_CONTROL_REGISTER)
+            for mask, bit_name in FORCE_CONTROL_BITS:
+                data[bit_name] = bool(raw_force & mask) if raw_force is not None else None
+
+            # ── Number registers (control register area) — ook gebatcht ──
+            for run in _NUMBER_RUNS:
+                start = run[0][0]
+                values = self._read_range(start, len(run))
+                for i, (address, name, unit, device_class, mn, mx, step) in enumerate(run):
+                    raw = values[i] if values is not None and i < len(values) else None
+                    if raw is not None:
+                        signed_check = _to_signed(raw)
+                        if not (mn <= signed_check <= mx):
+                            _LOGGER.warning(
+                                "Implausibele waarde %d (verwacht %d..%d) voor "
+                                "number-register 0x%04X binnen batch — losse "
+                                "her-lezing", signed_check, mn, mx, address,
+                            )
+                            raw = self._read_one(address, min_val=mn, max_val=mx)
+                    data[name] = _to_signed(raw) if raw is not None else None
+
+            # ── Switch register ──
+            raw = self._read_one(SWITCH_REGISTER)
+            data["ON/OFF"] = bool(raw) if raw is not None else None
+
+            # ── Select registers ──
+            for address, name, options_map in SELECT_REGISTERS:
+                raw = self._read_one(address)
+                if raw is None:
+                    data[name] = None
+                else:
+                    rev = {v: k for k, v in options_map.items()}
+                    data[name] = rev.get(raw, f"Unknown ({raw})")
+
+            # ── P116 Unit Temperature Control Mode (alleen-lezen) ──
+            # Bewust GEEN onderdeel van SELECT_REGISTERS: dit is een
+            # fabrieksparameter (zie const.py voor de toelichting), dus
+            # hier los uitgelezen en als platte waarde opgeslagen i.p.v.
+            # via het schrijfbare select-mechanisme.
+            raw = self._read_one(CONTROL_MODE_REGISTER)
+            if raw is None:
+                data["Unit Temperature Control Mode"] = None
+            else:
+                data["Unit Temperature Control Mode"] = CONTROL_MODE_OPTIONS.get(raw, f"Unknown ({raw})")
+
+            if self._implausible_count:
+                _LOGGER.info(
+                    "Pollcyclus voltooid met %d implausibele waarde(n) "
+                    "afgevangen en herprobeerd",
+                    self._implausible_count,
+                )
+
+            return data
+        finally:
+            # Close the connection at the end of every cycle so the socket
+            # never sits idle across scan_interval — avoids stale/half-closed
+            # connections that the device silently drops between polls.
+            with self._lock:
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None
+
+    def write_register(self, address: int, value: int) -> bool:
+        """Write a single holding register.
+
+        Sommige registers (bijv. 0x0116, Electric Heater Allow Start Temp.,
+        bereik -15..40) hebben een negatief bereik. Modbus-holding-registers
+        zijn 16-bit unsigned op de draad; een negatieve Python-int maskeren
+        we daarom naar zijn 16-bit two's-complement-representatie
+        (bijv. -7 -> 0xFFF9) vóór verzending. Voor waarden die al
+        0..65535 zijn heeft dit geen effect.
+        """
+        self._sleep_request_delay()
+        with self._lock:
+            try:
+                client = self._get_client()
+                result = client.write_register(
+                    address=address, value=value & 0xFFFF, device_id=self.slave
+                )
+                return not result.isError()
+            except Exception as err:
+                _LOGGER.error("Write error at 0x%04X: %s", address, err)
+                self._client = None
+                return False
+            finally:
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None
+
+    def write_bit(self, register: int, mask: int, state: bool) -> bool:
+        """Zet of wist één bit in een bitmask-register (read-modify-write).
+
+        Gebruikt voor de Load Forcing-bits in register 0x0331: dat register
+        deelt één 16-bit waarde tussen meerdere onafhankelijke aan/uit-vlaggen
+        (compressor/EEV/EVI/ventilator forcering), dus een schrijfactie mag
+        nooit de andere bits overschrijven. Leest daarom eerst de actuele
+        registerwaarde vers uit — niet de gecachte pollwaarde uit
+        coordinator.data, die tot scan_interval seconden oud kan zijn — past
+        alleen het gevraagde bit aan, en schrijft het volledige register in
+        één atomaire stap terug.
+        """
+        self._sleep_request_delay()
+        with self._lock:
+            try:
+                client = self._get_client()
+                read_result = client.read_holding_registers(
+                    address=register, count=1, device_id=self.slave
+                )
+                if read_result.isError() or not read_result.registers:
+                    _LOGGER.error(
+                        "Kon register 0x%04X niet lezen voor bit-write (mask 0x%04X)",
+                        register, mask,
+                    )
+                    return False
+                current = read_result.registers[0]
+                new_value = (current | mask) if state else (current & ~mask & 0xFFFF)
+                write_result = client.write_register(
+                    address=register, value=new_value, device_id=self.slave
+                )
+                return not write_result.isError()
+            except Exception as err:
+                _LOGGER.error(
+                    "Bit-write fout op 0x%04X (mask 0x%04X): %s", register, mask, err
+                )
+                self._client = None
+                return False
+            finally:
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                    self._client = None"""Modbus TCP data coordinator for Next Heatpump."""
+from __future__ import annotations
+
+import logging
+import ctypes
+import random
+import threading
+import time
+from datetime import timedelta
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+from .const import (
+    DOMAIN,
+    SENSOR_REGISTERS,
+    STATUS_REGISTERS,
+    NUMBER_REGISTERS,
+    SWITCH_REGISTER,
+    SELECT_REGISTERS,
+    ENERGY_REGISTER,
+    REFRIGERANT_REGISTER,
+    REFRIGERANT_TYPES,
+    FORCE_CONTROL_REGISTER,
+    FORCE_CONTROL_BITS,
+    FORCE_VALUE_REGISTERS,
+    SILENT_MODE_REGISTERS,
+    ELECTRIC_HEATER_REGISTERS,
+    VERSION_INFO_START_REGISTER,
+    CONTROL_MODE_REGISTER,
+    CONTROL_MODE_OPTIONS,
+    PRODUCT_TYPE_MAP,
+    PRODUCT_TYPE_ID_MAP,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+WRITE_DELAY = 0.25
+REQUEST_DELAY = 0.5
+# Kleine willekeurige variatie op REQUEST_DELAY, zodat onze polling niet
+# steeds op exact dezelfde momenten valt als het pollritme van een andere
+# Modbus-master op de bus (bijv. een display via een RS485-splitter).
+REQUEST_DELAY_JITTER = 0.2
+
+# Aantal pogingen per registerlezing voordat we het als mislukt beschouwen
+READ_ATTEMPTS = 2
+
+# ── Bus-contentie / "circuit breaker" ──
+# Als meerdere registers/batches ná elkaar volledig mislukken, is dat een
+# sterke aanwijzing dat de gedeelde RS485-bus op dit moment bezet is door
+# een andere master (bijv. een display via een 2-master/1-slave splitter),
+# niet dat onze eigen instellingen fout staan. Doorrammen met de gebruikelijke
+# REQUEST_DELAY helpt dan niet en genereert alleen maar extra reconnects naar
+# de RTU-TCP gateway terwijl die het al druk heeft. In plaats daarvan pauzeren
+# we een tijdje zodat de bus kan vrijkomen, en gaan daarna pas weer verder.
+CONSECUTIVE_FAILURE_THRESHOLD = 3
+BURST_COOLDOWN = 8.0  # seconden
+
+# Maximaal aantal registers dat in één Modbus-call wordt gebatcht.
+# Ruim onder de Modbus-limiet van 125, en klein genoeg om een batch op
+# 9600 bd nog in een fractie van een seconde te versturen/ontvangen.
+MAX_BATCH_SIZE = 32
+
+
+def _to_signed(value: int) -> int:
+    return ctypes.c_int16(value).value
+
+
+def _contiguous_runs(specs: list[tuple], max_batch: int = MAX_BATCH_SIZE) -> list[list[tuple]]:
+    """Groepeer registerspecs (waarvan specs[i][0] het adres is) in reeksen
+    van opeenvolgende adressen, zodat ze in één Modbus-call gelezen kunnen
+    worden i.p.v. één call per register.
+
+    Een reeks wordt afgekapt zodra het volgende adres niet aansluit, of
+    zodra `max_batch` registers bereikt is.
+    """
+    if not specs:
+        return []
+    runs: list[list[tuple]] = []
+    current = [specs[0]]
+    for spec in specs[1:]:
+        prev_address = current[-1][0]
+        address = spec[0]
+        if address == prev_address + 1 and len(current) < max_batch:
+            current.append(spec)
+        else:
+            runs.append(current)
+            current = [spec]
+    runs.append(current)
+    return runs
+
+
+# Eenmalig (bij import) berekend — de registerlijsten in const.py zijn statisch.
+_SENSOR_RUNS = _contiguous_runs(SENSOR_REGISTERS)
+# SILENT_MODE_REGISTERS (0x0158/0x0159), ELECTRIC_HEATER_REGISTERS (0x0116)
+# en FORCE_VALUE_REGISTERS (0x0332, 0x033E) meelezen via dezelfde
+# batchlogica als de gewone setpoints — geen van deze sluit aan op
+# 0x0300-0x0303, dus _contiguous_runs geeft ze automatisch hun eigen
+# (enkelvoudige of gekoppelde) batch(es). Op adres gesorteerd toegevoegd,
+# puur voor leesbaarheid — de batchlogica zelf werkt ook prima met een
+# ongesorteerde lijst.
+_NUMBER_RUNS = _contiguous_runs(
+    ELECTRIC_HEATER_REGISTERS
+    + SILENT_MODE_REGISTERS
+    + NUMBER_REGISTERS
+    + FORCE_VALUE_REGISTERS
+)
+
+
+class NextCoordinator(DataUpdateCoordinator):
+
+    def __init__(self, hass, host, port, slave, scan_interval):
+        self.host = host
+        self.port = port
+        self.slave = slave
+        self._client = None
+        # ModbusTcpClient is not thread-safe, and both the polling cycle
+        # (_fetch_all, run in an executor thread) and service/entity writes
+        # (write_register, run in their own executor thread) share
+        # self._client. This lock ensures only one thread touches the
+        # socket at a time — prevents "Bad file descriptor" races where
+        # one thread closes the connection while another is mid read/write.
+        self._lock = threading.Lock()
+        # Teller: aantal implausibele waarden (buiten min_val/max_val) die
+        # tijdens de laatste pollcyclus zijn afgevangen en opnieuw geprobeerd.
+        # Gereset aan het begin van elke _fetch_all-cyclus.
+        self._implausible_count = 0
+        # Laatst succesvol (plausibel) gelezen register — gebruikt om te loggen
+        # welk register vlak vóór een implausibele lezing werd gelezen, om een
+        # "antwoord komt één stap te laat"-mismatch te kunnen herkennen.
+        self._last_read_address: int | None = None
+        self._last_read_value: int | None = None
+        # Aantal opeenvolgende volledig mislukte registers/batches — de
+        # circuit breaker voor busbezetting (zie _register_failure).
+        self._consecutive_failures = 0
+        super().__init__(
+            hass, _LOGGER, name=DOMAIN,
+            update_interval=timedelta(seconds=scan_interval),
         )
+
+    def _get_client(self):
+        """Return connected client, reconnect if needed."""
+        from pymodbus.client import ModbusTcpClient
+        if self._client is None or not self._client.connected:
+            if self._client is not None:
+                try:
+                    self._client.close()
+                except Exception:
+                    pass
+            self._client = ModbusTcpClient(
+                host=self.host, port=self.port, timeout=10, retries=3
+            )
+            self._client.connect()
+        return self._client
+
+    def _sleep_request_delay(self) -> None:
+        time.sleep(REQUEST_DELAY + random.uniform(0, REQUEST_DELAY_JITTER))
+
+    def _register_success(self) -> None:
+        """Reset de mislukking-op-rij-teller na een geslaagde lezing."""
+        self._consecutive_failures = 0
+
+    def _register_failure(self) -> None:
+        """Hoog de mislukking-op-rij-teller op en pauzeer indien nodig.
+
+        Wordt aangeroepen wanneer een register (via _read_one) of een hele
+        batch (via _read_range) uiteindelijk niets bruikbaars opleverde.
+        Bij CONSECUTIVE_FAILURE_THRESHOLD op rij nemen we aan dat de bus
+        momenteel bezet is door een andere master en pauzeren we even, in
+        plaats van door te blijven rammen met reconnects.
+        """
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= CONSECUTIVE_FAILURE_THRESHOLD:
+            _LOGGER.warning(
+                "%d opeenvolgende mislukte lezingen — de RS485-bus lijkt "
+                "momenteel bezet (bijv. door een andere Modbus-master zoals "
+                "een display via de splitter). Pauzeer %.0fs voordat er "
+                "verder wordt gepolld.",
+                self._consecutive_failures, BURST_COOLDOWN,
+            )
+            time.sleep(BURST_COOLDOWN)
+            self._consecutive_failures = 0
+
+    def _read_one(
+        self,
+        address: int,
+        attempts: int = READ_ATTEMPTS,
+        min_val: int | None = None,
+        max_val: int | None = None,
+    ) -> int | None:
+        """Read a single holding register with delay. Reconnects on failure.
+
+        No address offset is applied. pymodbus uses 0-based addressing natively,
+        identical to jsmodbus. Register 0x0040 = address 0x0040.
+
+        Probeert een read tot `attempts` keer voordat de client wordt weggegooid
+        en None wordt teruggegeven — voorkomt dat één hikkende read de hele
+        cyclus dwingt tot herhaaldelijk herverbinden.
+
+        Als min_val/max_val zijn opgegeven, wordt een waarde buiten dat bereik
+        behandeld als een mislukte read (kan wijzen op een mismatch tussen
+        verzoek en antwoord bij de RTU-TCP gateway) en opnieuw geprobeerd.
+        De vergelijking gebeurt op de signed-geïnterpreteerde waarde.
+        """
+        last_err: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            self._sleep_request_delay()
+            try:
+                with self._lock:
+                    client = self._get_client()
+                    result = client.read_holding_registers(
+                        address=address, count=1, device_id=self.slave
+                    )
+                if hasattr(result, 'isError') and result.isError():
+                    _LOGGER.warning(
+                        "Error reading register 0x%04X (attempt %d/%d)",
+                        address, attempt, attempts,
+                    )
+                    continue
+
+                value = result.registers[0]
+
+                if min_val is not None and max_val is not None:
+                    signed_value = _to_signed(value)
+                    if not (min_val <= signed_value <= max_val):
+                        self._implausible_count += 1
+                        if self._last_read_address is not None:
+                            _LOGGER.warning(
+                                "Implausibele waarde %d (verwacht %d..%d) voor "
+                                "register 0x%04X (attempt %d/%d) — vorig gelezen "
+                                "register was 0x%04X met waarde %s — waarschijnlijk "
+                                "mismatch, opnieuw proberen",
+                                signed_value, min_val, max_val, address, attempt, attempts,
+                                self._last_read_address, self._last_read_value,
+                            )
+                        else:
+                            _LOGGER.warning(
+                                "Implausibele waarde %d (verwacht %d..%d) voor "
+                                "register 0x%04X (attempt %d/%d) — geen vorig "
+                                "register bekend — waarschijnlijk mismatch, "
+                                "opnieuw proberen",
+                                signed_value, min_val, max_val, address, attempt, attempts,
+                            )
+                        continue
+
+                # Alleen bijhouden bij een geslaagde, plausibele read
+                self._last_read_address = address
+                self._last_read_value = value
+                self._register_success()
+                return value
+            except Exception as err:
+                last_err = err
+                _LOGGER.warning(
+                    "Exception reading 0x%04X (attempt %d/%d): %s",
+                    address, attempt, attempts, err,
+                )
+                with self._lock:
+                    self._client = None
+
+        if last_err is not None:
+            _LOGGER.warning(
+                "Gaf op na %d pogingen voor register 0x%04X: %s — reconnecting",
+                attempts, address, last_err,
+            )
+        self._register_failure()
+        return None
+
+    def _read_range(
+        self,
+        start_address: int,
+        count: int,
+        attempts: int = READ_ATTEMPTS,
+    ) -> list[int] | None:
+        """Lees `count` aaneengesloten holding registers in één Modbus-call.
+
+        Zelfde retry-/reconnect-gedrag als _read_one, maar dan voor een heel
+        blok registers tegelijk — dit scheelt round trips (en dus tijd op de
+        gedeelde RS485-bus) t.o.v. één call per register. Geeft bij succes
+        een lijst met `count` ruwe (unsigned) waarden terug, of None als het
+        hele blok na `attempts` pogingen nog steeds mislukt.
+
+        Plausibiliteitscontrole (min_val/max_val) gebeurt hier bewust niet —
+        dat blijft aan de aanroeper, die voor een enkel afwijkend register
+        binnen de batch een gerichte her-lezing via _read_one kan doen i.p.v.
+        meteen de hele batch af te keuren.
+        """
+        last_err: Exception | None = None
+        end_address = start_address + count - 1
+        for attempt in range(1, attempts + 1):
+            self._sleep_request_delay()
+            try:
+                with self._lock:
+                    client = self._get_client()
+                    result = client.read_holding_registers(
+                        address=start_address, count=count, device_id=self.slave
+                    )
+                if hasattr(result, 'isError') and result.isError():
+                    _LOGGER.warning(
+                        "Error reading range 0x%04X..0x%04X (attempt %d/%d)",
+                        start_address, end_address, attempt, attempts,
+                    )
+                    continue
+
+                values = list(result.registers)
+                if len(values) != count:
+                    # Sommige RTU-TCP gateways/RS485-hubs leveren bij een
+                    # verstoorde bustransactie een te kort of te lang
+                    # antwoord op zonder dat pymodbus dat als isError()
+                    # markeert. Zonder deze check zou de aanroeper met
+                    # values[i] buiten de lijst indexeren (IndexError) en
+                    # de hele pollcyclus laten crashen — behandel dit dus
+                    # als een mislukte poging, net als een echte fout.
+                    _LOGGER.warning(
+                        "Onvolledig antwoord voor bereik 0x%04X..0x%04X: "
+                        "%d register(s) verwacht, %d ontvangen (attempt %d/%d)",
+                        start_address, end_address, count, len(values),
+                        attempt, attempts,
+                    )
+                    continue
+
+                self._register_success()
+                return values
+            except Exception as err:
+                last_err = err
+                _LOGGER.warning(
+                    "Exception reading range 0x%04X..0x%04X (attempt %d/%d): %s",
+                    start_address, end_address, attempt, attempts, err,
+                )
+                with self._lock:
+                    self._client = None
+
+        if last_err is not None:
+            _LOGGER.warning(
+                "Gaf op na %d pogingen voor bereik 0x%04X..0x%04X: %s — reconnecting",
+                attempts, start_address, end_address, last_err,
+            )
+        self._register_failure()
+        return None
+
+    def _apply_scale(self, spec: tuple, raw: int | None):
+        """Pas signed-conversie en schaling toe, zoals voorheen in _fetch_all.
+
+        Deze integratie is uitsluitend bedoeld voor de R290-uitvoering, dus
+        er wordt niet meer per koelmiddeltype vertakt — elk register
+        gebruikt gewoon zijn eigen, vast gedefinieerde schaling.
+        """
+        address, name, unit, device_class, scale, signed, min_val, max_val = spec
+        if raw is None:
+            return None
+        value = _to_signed(raw) if signed else raw
+        return round(value * scale, 1) if scale != 1 else value
+
+    def _read_sensor_run(self, run: list[tuple], data: dict) -> None:
+        """Lees één aaneengesloten reeks SENSOR_REGISTERS in één batch-call
+        en vul `data` met de verwerkte waarden. Registers die buiten hun
+        min/max-bereik vallen worden individueel opnieuw gelezen (zelfde
+        vangnet als voorheen), zonder de hele batch te herhalen.
+        """
+        start = run[0][0]
+        values = self._read_range(start, len(run))
+        for i, spec in enumerate(run):
+            address, name, unit, device_class, scale, signed, min_val, max_val = spec
+            # Defensieve bound-check: _read_range garandeert inmiddels zelf al
+            # len(values) == len(run) bij succes, maar dit voorkomt dat een
+            # toekomstige wijziging hier alsnog een IndexError laat ontstaan.
+            raw = values[i] if values is not None and i < len(values) else None
+
+            if raw is not None and min_val is not None and max_val is not None:
+                signed_check = _to_signed(raw)
+                if not (min_val <= signed_check <= max_val):
+                    self._implausible_count += 1
+                    _LOGGER.warning(
+                        "Implausibele waarde %d (verwacht %d..%d) voor register "
+                        "0x%04X binnen batch 0x%04X..0x%04X — losse her-lezing",
+                        signed_check, min_val, max_val, address,
+                        start, start + len(run) - 1,
+                    )
+                    raw = self._read_one(address, min_val=min_val, max_val=max_val)
+                else:
+                    self._last_read_address = address
+                    self._last_read_value = raw
+
+            data[name] = self._apply_scale(spec, raw)
 
     async def _async_update_data(self) -> dict:
         try:
@@ -427,13 +1008,14 @@ class NextCoordinator(DataUpdateCoordinator):
         # cyclus — een busbotsing kan precies op de overgang tussen twee
         # cycli vallen, en dan willen we die telling laten doorlopen.
         try:
-            # ── Eénmalig: koelmiddeltype detecteren ──
-            if self.refrigerant_type is None:
-                self._detect_refrigerant()
-
-            # Sla koelmiddelinfo op in data zodat het als sensor beschikbaar is
-            data["Refrigerant Type"] = self.refrigerant_name
-            data["Temperature Scale"] = self.temperature_scale
+            # ── Koelmiddeltype (alleen ter informatie) ──
+            # Deze integratie is uitsluitend bedoeld voor de R290-uitvoering,
+            # dus er wordt niet meer per koelmiddeltype vertakt/geschaald —
+            # het register wordt alleen nog uitgelezen en getoond ter
+            # referentie/verificatie (bijv. om te bevestigen dat de unit
+            # daadwerkelijk R290 rapporteert).
+            raw = self._read_one(REFRIGERANT_REGISTER)
+            data["Refrigerant Type"] = REFRIGERANT_TYPES.get(raw, f"Unknown ({raw})") if raw is not None else None
 
             # ── Compressor target frequency ──
             raw = self._read_one(0x0027)

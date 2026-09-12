@@ -231,7 +231,6 @@ class NextRefrigerantSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return {
-            "temperature_scale": self.coordinator.data.get("Temperature Scale"),
             "p119_register": "0x0177",
         }
 

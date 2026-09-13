@@ -34,7 +34,7 @@ This integration was developed and tested with the following hardware:
 
 Any RS485-to-Modbus-TCP bridge should work.
 
-###  Or disconnect TFT display and use this repository with EW11A instead. Both connected on the display connection rs485 WILL NOT WORK!
+### Or disconnect TFT display and use this repository with EW11A instead. Both connected on the display connection rs485 WILL NOT WORK!
 ---
 
 ## Elfin EW11 configuration
@@ -84,9 +84,9 @@ Copy the `custom_components/next_heatpump/` folder into your HA `config/custom_c
    - **Scan interval** in seconds (default `45`)
 
 ---
-## Schema normal/ eco modus
+## Schedule normal/eco mode
 
-Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (backend) en de bijbehorende scheduler-card (frontend). Omdat de kaart niet vanzelf weet welke opties jouw select.running_mode heeft, geeft het bestand  customize.yaml die koppeling mee ("Standard Mode" → Normaal, "Eco" → Eco/Silent). Daarna maak je de twee tijdsblokken (08:00 → Normaal, 22:00 → Eco) rechtstreeks in de kaart zelf aan — geen YAML meer nodig voor het schema, en volledig tikbaar/aanpasbaar vanaf het dashboard.
+Brief overview: via HACS you install two things — the Scheduler integration (backend) and the matching scheduler card (frontend). Since the card doesn't automatically know which options your select.running_mode has, the customize.yaml file provides that mapping ("Standard Mode" → Normal, "Eco" → Eco/Silent). You then create the two time blocks (08:00 → Normal, 22:00 → Eco) directly in the card itself — no more YAML needed for the schedule, and fully tappable/adjustable from the dashboard.
 
 ## Entities created
 
@@ -123,72 +123,74 @@ Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (
 | Calculated Power | W | Calculated: voltage × current |
 | Fan settings in ECO mode| 20-60 Hz |  |
 | Compressor settings in ECO mode |20- 80 Hz |  |
-| Heating Curve Target | °C | Calculated: doel-watertemp. volgens de gekozen stooklijn (Heating Setting Curve) + actuele buitentemp. (T1). Zie Technical notes. |
-| Unit Temperature Control Mode | — | Read-only. "Inlet (T6)" of "Outlet (T7)" — zie Technical notes (P116) |
-| Actual Controlled Water Temp | °C | T6 of T7, automatisch gekozen op basis van Unit Temperature Control Mode |
+| Heating Curve Target | °C | Calculated: target water temp. according to the selected heating curve (Heating Setting Curve) + current outdoor temp. (T1). See Technical notes. |
+| Unit Temperature Control Mode | — | Read-only. "Inlet (T6)" or "Outlet (T7)" — see Technical notes (P116) |
+| Actual Controlled Water Temp | °C | T6 or T7, automatically selected based on Unit Temperature Control Mode |
 
 ---
 
-## Technical notes (vervolg)
+## Technical notes (continued)
 
-### Gevolgde stooklijn (Heating Curve Target)
+### Followed heating curve (Heating Curve Target)
 
-De Engineering Manual (hfst. 4.1.1) definieert 16 vaste stooklijnen (H1–H8
-"High Temperature Curve", L1–L8 "Low Temperature Curve"), elk een tabel die
-een buitentemperatuur-bereik koppelt aan een doel-watertemperatuur. Deze
-tabellen zijn overgenomen in `const.py` (`HEATING_CURVES`) en worden live
-doorgerekend tegen de actuele buitentemperatuur (T1) en de gekozen curve
-(`Heating Setting Curve`), resultaat in `sensor.heating_curve_target`.
+The Engineering Manual (ch. 4.1.1) defines 16 fixed heating curves (H1–H8
+"High Temperature Curve", L1–L8 "Low Temperature Curve"), each a table that
+maps an outdoor temperature range to a target water temperature. These
+tables have been transcribed into `const.py` (`HEATING_CURVES`) and are
+calculated live against the current outdoor temperature (T1) and the
+selected curve (`Heating Setting Curve`), with the result exposed as
+`sensor.heating_curve_target`.
 
-**Bekende afwijking in het brondocument:** in de HL4-tabel ontbreekt het
-buitentemperatuurbereik 8–13°C (springt in de manual direct van "13≤T<18"
-naar "6≤T<8") — vermoedelijk een druk-/OCR-fout. Letterlijk overgenomen;
-in dat bereik geeft de sensor `Onbekend` terug. Verifieer tegen je eigen
-papieren handleiding als je HL4 in dat bereik gebruikt.
+**Known discrepancy in the source document:** the HL4 table is missing the
+outdoor temperature range 8–13°C (the manual jumps directly from
+"13≤T<18" to "6≤T<8") — likely a printing/OCR error. Transcribed
+literally; in that range the sensor returns `Unknown`. Verify against your
+own printed manual if you use HL4 in that range.
 
-De volledige curve (alle breekpunten) staat als `curve_points`-attribuut op
-`sensor.heating_curve_target`, bruikbaar voor een grafiekweergave op je
-dashboard — zie [Dashboard: stooklijn-grafiek](#dashboard-stooklijn-grafiek)
-hieronder.
+The full curve (all breakpoints) is available as a `curve_points` attribute
+on `sensor.heating_curve_target`, usable for a chart on your dashboard —
+see [Dashboard: heating curve chart](#dashboard-heating-curve-chart)
+below.
 
 ### P116 — Unit Temperature Control Mode
 
-Fabrieksparameter (register `0x0174`, manual hfst. 2.8) die bepaalt of de
-unit intern regelt op de water-**inlet** (T6) of water-**outlet** (T7)
-temperatuur. Bewust **niet** geïmplementeerd als schrijfbare `select`
-entiteit — in tegenstelling tot Mode/Running Mode is dit geen routinematige
-bedieningskeuze maar een installatie-/servicetijdsparameter, en een
-dropdown-weergave zou dat ten onrechte suggereren. In plaats daarvan:
+Factory parameter (register `0x0174`, manual ch. 2.8) that determines
+whether the unit internally controls on the water **inlet** (T6) or water
+**outlet** (T7) temperature. Deliberately **not** implemented as a
+writable `select` entity — unlike Mode/Running Mode, this is not a
+routine operating choice but an installation/service-time parameter, and
+a dropdown would incorrectly suggest otherwise. Instead:
 
-- `sensor.unit_temperature_control_mode` toont de huidige waarde,
-  alleen-lezen.
-- `sensor.actual_controlled_water_temp` volgt hier automatisch op: geeft
-  altijd T6 of T7 terug, wat de unit ook daadwerkelijk als regelreferentie
-  gebruikt — zodat andere berekeningen (zoals de stooklijn-vergelijking
-  hierboven) niet zelf hoeven te kiezen tussen T6/T7 en correct blijven als
-  deze parameter ooit wijzigt.
+- `sensor.unit_temperature_control_mode` shows the current value,
+  read-only.
+- `sensor.actual_controlled_water_temp` automatically follows this: it
+  always returns whichever of T6 or T7 the unit is actually using as its
+  control reference — so other calculations (such as the heating curve
+  comparison above) don't need to choose between T6/T7 themselves and
+  stay correct if this parameter ever changes.
 
-### Dashboard: stooklijn-grafiek
+### Dashboard: heating curve chart
 
-Een voorbeeld-dashboardsectie (entities-kaart + grafiek van de gekozen
-curve met een gemarkeerd huidig-punt) staat in
+An example dashboard section (entities card + a chart of the selected
+curve with the current point highlighted) is available in
 [`dashboard/stooklijn-sectie.yaml`](dashboard/stooklijn-sectie.yaml).
 
-**Vereist: [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
-via HACS** (categorie Frontend). Home Assistant heeft standaard geen kaart
-die een vaste functie (buitentemp. → doeltemp.) kan plotten los van
-tijdreeksen — deze community-kaart wel, via zijn `data_generator`-optie.
+**Requires: [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
+via HACS** (Frontend category). Home Assistant doesn't have a built-in
+card that can plot a fixed function (outdoor temp. → target temp.)
+independent of time series — this community card can, via its
+`data_generator` option.
 
-De grafiek toont de curve als trapvorm (`stroke.curve: stepline`, één punt
-per temperatuurbucket) en sluit netjes af met een bericht in plaats van een
-lege/kapotte grafiek wanneer `Heating Setting Curve` op **Off** staat.
+The chart displays the curve as a step shape (`stroke.curve: stepline`,
+one point per temperature bucket) and gracefully shows a message instead
+of an empty/broken chart when `Heating Setting Curve` is set to **Off**.
 
 ---
 
 ## Changelog
 
-Zie [`CHANGELOG.md`](CHANGELOG.md) voor de volledige lijst met bugfixes en
-nieuwe features per release.
+See [`CHANGELOG.md`](CHANGELOG.md) for the full list of bug fixes and new
+features per release.
 
 
 ### Several Binary Sensors and fault sensors 
@@ -211,29 +213,29 @@ nieuwe features per release.
 | Underfloor Heating Setting Curve | Select | Off, H1–H8, L1–L8 |
 | Hot water Setting Curve | Select | Off, 1-4 |
 | Temp setting auxiliary heating P22 | Select | temp value |
-| Min Flow Protection | Number | 0–100 L/min — fabrieksparameter ("Low protection value - Water flow rate", register 0x0186). Bescherming tegen te lage waterdoorstroming. |
-|Compressor Forced Control	Switch	on / off — |dwingt handmatige compressorfrequentie af
-|Fan Forced Control	Switch	on / off — |dwingt handmatige ventilatorsnelheid af
-|Compressor Forced Frequency	Number	0–120 Hz —|alleen actief zolang "Compressor Forced Control" aan staat
-|Fan Forced Speed	Number	0–80 Hz — |alleen actief zolang "Fan Forced Control" aan staat
-|Silent Mode - Compressor Max Frequency	Number	|20–70 Hz —| bovengrens tijdens Silent/Eco-modus (fabrieksparameter P88)
-|Silent Mode - Fan Max Frequency	Number	|20–60 Hz — |bovengrens tijdens Silent/Eco-modus (fabrieksparameter P89)
+| Min Flow Protection | Number | 0–100 L/min — factory parameter ("Low protection value - Water flow rate", register 0x0186). Protection against too-low water flow. |
+|Compressor Forced Control	Switch	on / off — |forces manual compressor frequency
+|Fan Forced Control	Switch	on / off — |forces manual fan speed
+|Compressor Forced Frequency	Number	0–120 Hz —|only active while "Compressor Forced Control" is on
+|Fan Forced Speed	Number	0–80 Hz — |only active while "Fan Forced Control" is on
+|Silent Mode - Compressor Max Frequency	Number	|20–70 Hz —| upper limit during Silent/Eco mode (factory parameter P88)
+|Silent Mode - Fan Max Frequency	Number	|20–60 Hz — |upper limit during Silent/Eco mode (factory parameter P89)
 
 ## Technical notes
 
-## "Silent Mode frequentiegrenzen (P88/P89)"
+## "Silent Mode frequency limits (P88/P89)"
 
-Registers 0x0158 (compressor, 20–70 Hz) en 0x0159 (ventilator, 20–60 Hz) uit de "System Parameters P"-sectie (0x0100–0x02FF) van de Engineering Manual. Dit zijn dezelfde grenswaarden die op het bediendisplay onder installateurswachtwoord instelbaar zijn (P88/P89, hoofdstuk "Silent Mode") — bedoeld om geluidsoverlast te beperken.
-Dit is geen forceerwaarde: de warmtepomp blijft binnen deze grens gewoon zelf regelen op basis van vraag/druk/temperatuur. De grens geldt alleen zolang de unit in Silent/Eco-modus draait (zet de bestaande "Running Mode" select-entiteit op "Eco"). Met deze twee registers is het bediendisplay dus niet meer nodig om deze waarden aan te passen.
+Registers 0x0158 (compressor, 20–70 Hz) and 0x0159 (fan, 20–60 Hz) from the "System Parameters P" section (0x0100–0x02FF) of the Engineering Manual. These are the same limit values that are adjustable on the control display under the installer password (P88/P89, "Silent Mode" chapter) — intended to reduce noise nuisance.
+This is not a forced value: within this limit, the heat pump simply keeps controlling itself based on demand/pressure/temperature. The limit only applies while the unit is running in Silent/Eco mode (set the existing "Running Mode" select entity to "Eco"). With these two registers, the control display is therefore no longer needed to adjust these values.
 
 ## "Forced control (compressor/fan)"
 
-Sinds deze versie kun je de compressorfrequentie en ventilatorsnelheid handmatig vastzetten, gebaseerd op register 0x0331 ("Load Forcing Control") en de bijbehorende waarderegisters 0x0332 (compressor, 0–120 Hz) en 0x033E (ventilator, 0–80 Hz) uit de Engineering Manual.
+As of this version you can manually lock the compressor frequency and fan speed, based on register 0x0331 ("Load Forcing Control") and the corresponding value registers 0x0332 (compressor, 0–120 Hz) and 0x033E (fan, 0–80 Hz) from the Engineering Manual.
 
-### Dit is een service-/commissioningfunctie, GEEN NORMALE BEDIENINGSKNOP. ALLEEN GEBRUIKEN IN TESTMODUS
-Zolang de bijbehorende "Forced Control"-switch aan staat, negeert de warmtepomp zijn eigen regellus voor dat onderdeel en houdt hij de ingestelde frequentie/snelheid aan — zonder zelf te corrigeren op basis van druk, temperatuur of andere veiligheidsgrenzen.
-## Zet de switch na gebruik altijd weer uit of gebruik het niet en verwijder de entiteiten uit je lijst!
-Incorrect gebruik van deze functie kan de warmtepomp beschadigen of onveilige bedrijfscondities veroorzaken (bijv. te hoge/lage druk). Gebruik op eigen risico — zie de disclaimer onderaan dit document.
+### This is a service/commissioning function, NOT A NORMAL CONTROL BUTTON. USE IN TEST MODE ONLY
+As long as the corresponding "Forced Control" switch is on, the heat pump ignores its own control loop for that component and holds the configured frequency/speed — without correcting itself based on pressure, temperature, or other safety limits.
+## Always turn the switch back off after use, or don't use it and remove the entities from your list!
+Incorrect use of this function can damage the heat pump or cause unsafe operating conditions (e.g. too high/low pressure). Use at your own risk — see the disclaimer at the bottom of this document.
 
 
 ### Scan interval

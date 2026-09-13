@@ -160,14 +160,23 @@ class NextCOPSensor(CoordinatorEntity, SensorEntity):
             t_in = float(data.get("Water Inlet Temp. T6") or 0)
             t_out = float(data.get("Water Outlet Temp. T7") or 0)
             electrical_kw = float(data.get("Unit Input Power") or 0)
-            if electrical_kw <= 0:
+            if electrical_kw < 0.2:
+                # Compressor niet actief genoeg (opstart/stop/standby) —
+                # bij zo'n laag vermogen is elke COP-berekening ruis.
                 return None
             delta_t = t_out - t_in
+            if delta_t <= 0:
+                return None
             thermal_kw = flow * delta_t * 4.186 / 60
-            return round(thermal_kw / electrical_kw, 2)
+            cop = thermal_kw / electrical_kw
+            if cop <= 0 or cop > 10:
+                # Fysisch onrealistisch voor een lucht/water-warmtepomp —
+                # negeren i.p.v. als geldige meting doorgeven.
+                return None
+            return round(cop, 2)
         except (TypeError, ValueError):
             return None
-
+            
     @property
     def device_info(self):
         return {

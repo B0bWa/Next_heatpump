@@ -156,6 +156,29 @@ NUMBER_REGISTERS = [
     # waterdoorstroming (risico op bevriezing/ooverhitting van de
     # warmtewisselaar).
     (0x0186, "Min Flow Protection",     "L/min", None, 0, 100, 1),
+
+    # ─────────────────────────────────────────────
+    # Waterpomp (P_a, ingebouwde hoofdpomp) — snelheidsregeling
+    # Engineering Manual, "System Parameters P" (0x0100～0x02FF), registers
+    # 0x0163/0x0164/0x0204. Alleen registers waarvan naam én eenheid
+    # ondubbelzinnig zijn zijn hier opgenomen; zie het commentaar bij elk
+    # register voor de context. De pomp regelt normaal gesproken zelf zijn
+    # snelheid (PWM, 20-99%) binnen deze grenzen op basis van vraag/ΔT —
+    # dit zijn dus geen "forceerwaarden" zoals FORCE_VALUE_REGISTERS, maar
+    # bovengrenzen/instelwaarden voor de eigen regellus van de pomp, net als
+    # SILENT_MODE_REGISTERS. Register 0x0057 "Water Pump Speed PWM" (in
+    # SENSOR_REGISTERS) blijft de enige manier om de actuele snelheid te
+    # zien — deze drie zijn er niet los van te herleiden welke live waarde
+    # ze precies opleveren, dus verifieer bij het instellen het effect via
+    # die sensor.
+    #
+    # Geen van deze drie heeft een P-nummer op het bediendisplay (voor
+    # zover in de manual te vinden) — ze zijn alleen via Modbus/de
+    # Engineering Tool te benaderen, niet via het display, ook niet met
+    # installateurswachtwoord.
+    (0x0163, "Water Pump Speed Regulation Differential", "°C", "temperature", 2, 10, 1),
+    (0x0164, "Water Pump Minimum Speed",                 "%",  None,          20, 80, 1),
+    (0x0204, "Water Pump Maximum Speed",                 "%",  None,          50, 99, 1),
 ]
 
 # ON/OFF switch register, 0=off, 1=on

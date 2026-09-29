@@ -1,4 +1,18 @@
-# Toevoegen voor de schema instellingen Normaal/ Eco schema's
+# Loads default set of integrations. Do not remove.
+default_config:
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+# Text to speech
+tts:
+  - platform: google_translate
+
+utility_meter:
+  energieverbruik_warmtepomp:
+    source: sensor.unit_power_consumption
+    name: Energieverbruik warmtepomp
+    cycle: daily
+
 homeassistant:
    customize: !include customize.yaml
 
@@ -7,7 +21,7 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 sensor: !include_dir_merge_list sensors/
 
-# Voor Heat Next WP setpoint dit toevoegen
+# Voor Heat Next WP
 template:
   - sensor:
       - name: "Warmtepomp klimaat setpoint"
@@ -38,4 +52,72 @@ template:
         state: >
           {{ states('number.temp_set_hot_water') }}
 
+
+  - sensor:
+      - name: >
+          {% set curve = states('select.heating_setting_curve') %}
+          Delta T (T7-T6) - {{ curve }}
+        unique_id: delta_t_t7_t6
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >
+          {% set t6 = states('sensor.water_inlet_temp_t6') | float(none) %}
+          {% set t7 = states('sensor.water_outlet_temp_t7') | float(none) %}
+          {% if t6 is none or t7 is none %}
+            {{ none }}
+          {% else %}
+            {{ (t7 - t6) | round(1) }}
+          {% endif %}
+  - binary_sensor:
+      - name: "Warmtepomp Modus Heating actief"
+        unique_id: wp_modus_heating_actief
+        state: "{{ 'Heating' in states('select.mode') }}"
+
+      - name: "Warmtepomp Modus Cooling actief"
+        unique_id: wp_modus_cooling_actief
+        state: "{{ 'Cooling' in states('select.mode') }}"
+
+      - name: "Warmtepomp Modus DHW actief"
+        unique_id: wp_modus_dhw_actief
+        state: "{{ 'Hot Water' in states('select.mode') }}"
+
+  - sensor:
+      - name: "Running Mode (weergave)"
+        unique_id: running_mode_display
+        state: "{{ states('select.running_mode') }}"
+
+      - name: "Heating Setting Curve (weergave)"
+        unique_id: heating_setting_curve_display
+        state: "{{ states('select.heating_setting_curve') }}"
+
+      - name: "Status (weergave)"
+        unique_id: status_display
+        icon: mdi:thermostat
+        state: >
+          {% set mode = states('climate.next_hp') %}
+          {% set vertaling = {
+            'heat': 'Verwarmen', 'cool': 'Koelen', 'off': 'Uit',
+            'auto': 'Automatisch', 'heat_cool': 'Verwarmen/Koelen',
+            'dry': 'Ontvochtigen', 'fan_only': 'Ventileren'
+          } %}
+          {{ vertaling.get(mode, mode) }}
+
+ingress:
+#   zigbee2mqtt1:
+#     work_mode: hassio
+ #    title: Zigbee2Mqtt huis
+  #   icon: mdi:zigbee
+   #  url: 45df7312_zigbee2mqtt
+   zigbee2mqtt2:
+     work_mode: hassio
+     title: Zigbee2Mqtt atelier
+     icon: mdi:zigbee
+     url: 1ff69cfe_zigbee2mqtt
+mqtt: !include mqtt.yaml
+
+
+input_boolean:
+  warmtepomp_schema_actief:
+    name: "Warmtepomp schema actief"
+    icon: mdi:calendar-clock
 

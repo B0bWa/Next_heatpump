@@ -19,22 +19,15 @@ This integration was developed and tested with the following hardware:
 
 <img width="150" height="125" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
 
-<img width="150" height="125" alt="Naamloos" src="https://github.com/user-attachments/assets/f37784bc-e5b3-4190-a267-d83e73a5b944" />
 
-
-
-- **E810-R21 Ebyte** RS485 splitter (2 master / 1 slave): 
-  - **Slave port** → Modbus RS485 cable from the heat pump
-  - **Master 1** → Elfin EW11 4G module
-  - **Master 2** → Elfin EW11A (RS485 to WiFi/TCP bridge)
+- ** → Elfin EW11A (RS485 to WiFi/TCP bridge)
 - The **Elfin EW11A** configured as TCP Server on port **502**
 - Modbus slave ID of the heat pump: **1** (default)
 
-[E810-Rx1+User+Manual_EN_v1.0.pdf](https://github.com/user-attachments/files/31154340/E810-Rx1%2BUser%2BManual_EN_v1.0.pdf)
-
 Any RS485-to-Modbus-TCP bridge should work.
 
-### Or disconnect TFT display and use this repository with EW11A instead. Both connected on the display connection rs485 WILL NOT WORK!
+### Disconnect TFT display and use this repository with EW11A instead. Both connected on the display connection rs485 WILL NOT WORK!
+
 ---
 
 ## Elfin EW11 configuration
@@ -47,6 +40,7 @@ Any RS485-to-Modbus-TCP bridge should work.
 - Parity: `None`
 - Buffer Size: `1024`
 - Gap Time: `100`
+- 
 - <img width="350" height="350" alt="{E7B4D0CA-61EF-42FF-AC66-2C990CC92447}" src="https://github.com/user-attachments/assets/2c12cfb9-5e27-4f42-8286-12312379f9bc" />
 
 

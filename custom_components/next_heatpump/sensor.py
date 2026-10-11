@@ -188,7 +188,7 @@ class NextCOPSensor(CoordinatorEntity, SensorEntity):
 
 
 class NextCalculatedPowerSensor(CoordinatorEntity, SensorEntity):
-    """Estimated power = Supply Voltage x Compressor Current Draw."""
+    """Geschat vermogen = Unit Input Voltage x Unit Input Current (netspanning x totale toestelstroom, dus schijnbaar vermogen in VA)."""
 
     def __init__(self, coordinator):
         super().__init__(coordinator)
@@ -203,8 +203,8 @@ class NextCalculatedPowerSensor(CoordinatorEntity, SensorEntity):
     def native_value(self) -> float | None:
         data = self.coordinator.data
         try:
-            voltage = float(data.get("AC Input Voltage") or 0)
-            current = float(data.get("Compressor Phase Current") or 0)
+            voltage = float(data.get("Unit Input Voltage") or 0)
+            current = float(data.get("Unit Input Current") or 0)
             if voltage <= 0:
                 return None
             return round(voltage * current, 1)

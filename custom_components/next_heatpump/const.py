@@ -36,7 +36,6 @@ SENSOR_REGISTERS = [
     (0x0043, "EVI Valve Open Step",          "P",     None,               1,     True,  0,    500),
 
     # --- Elektrisch (compressor niveau) ---
-    (0x0044, "AC Input Voltage",             "V",     "voltage",          1,     True,  0,    500),
     (0x0045, "AC Input Current",             "A",     "current",          0.1,   True,  0,    600),
     (0x0046, "Compressor Phase Current",     "A",     "current",          0.1,   True,  0,    600),
 

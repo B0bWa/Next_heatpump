@@ -119,11 +119,16 @@ class NextThermalPowerSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        data = self.coordinator.data
+        data = self.coordinator.data or {}
         try:
-            flow = float(data.get("Water Flow") or 0)
-            t_in = float(data.get("Water Inlet Temp. T6") or 0)
-            t_out = float(data.get("Water Outlet Temp. T7") or 0)
+            # Ontbrekende meting (mislukte Modbus-lezing) is NIET 0: met
+            # T6 = 0 °C zou delta-T absurd hoog worden en een enorme
+            # vermogenspiek geven, die een integratie/utility meter optelt.
+            raw = [data.get("Water Flow"), data.get("Water Inlet Temp. T6"),
+                   data.get("Water Outlet Temp. T7")]
+            if any(v is None for v in raw):
+                return None
+            flow, t_in, t_out = (float(v) for v in raw)
             delta_t = t_out - t_in
             thermal_kw = flow * delta_t * 4.186 / 60
             return round(thermal_kw, 2)
@@ -154,12 +159,13 @@ class NextCOPSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        data = self.coordinator.data
+        data = self.coordinator.data or {}
         try:
-            flow = float(data.get("Water Flow") or 0)
-            t_in = float(data.get("Water Inlet Temp. T6") or 0)
-            t_out = float(data.get("Water Outlet Temp. T7") or 0)
-            electrical_kw = float(data.get("Unit Input Power") or 0)
+            raw = [data.get("Water Flow"), data.get("Water Inlet Temp. T6"),
+                   data.get("Water Outlet Temp. T7"), data.get("Unit Input Power")]
+            if any(v is None for v in raw):
+                return None
+            flow, t_in, t_out, electrical_kw = (float(v) for v in raw)
             if electrical_kw < 0.2:
                 # Compressor niet actief genoeg (opstart/stop/standby) —
                 # bij zo'n laag vermogen is elke COP-berekening ruis.

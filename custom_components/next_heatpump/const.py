@@ -36,7 +36,7 @@ SENSOR_REGISTERS = [
     (0x0043, "EVI Valve Open Step",          "P",     None,               1,     True,  0,    500),
 
     # --- Elektrisch (compressor niveau) ---
-    (0x0044, "AC Input Voltage",             "V",     "voltage",          1,     True,  0,    300),
+    (0x0044, "AC Input Voltage",             "V",     "voltage",          1,     True,  0,    500),
     (0x0045, "AC Input Current",             "A",     "current",          0.1,   True,  0,    600),
     (0x0046, "Compressor Phase Current",     "A",     "current",          0.1,   True,  0,    600),
 
@@ -67,7 +67,7 @@ SENSOR_REGISTERS = [
     (0x0059, "DHW Return Water Temp.",        "°C",    "temperature",      1,     True,  -20,  90),
 
     # --- Unit niveau elektrisch ---
-    (0x005A, "Unit Input Voltage",           "V",     "voltage",          1,     True,  0,    300),
+    (0x005A, "Unit Input Voltage",           "V",     "voltage",          1,     True,  0,    500),
     (0x005B, "Unit Input Current",           "A",     "current",          0.01,  True,  0,    10000),
     (0x005C, "Unit Input Power",             "kW",    "power",            0.01,  True,  0,    3000),
 

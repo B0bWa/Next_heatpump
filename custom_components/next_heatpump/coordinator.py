@@ -61,6 +61,15 @@ BURST_COOLDOWN = 8.0  # seconden
 # 9600 bd nog in een fractie van een seconde te versturen/ontvangen.
 MAX_BATCH_SIZE = 32
 
+# "Trage" registers (instellingen, selects, statische info) hoeven niet elke
+# cyclus gelezen te worden: alleen elke SLOW_EVERY-de cyclus, en direct na
+# een schrijfactie. Dat scheelt ~13 van de ~25 calls per normale cyclus.
+SLOW_EVERY = 5
+
+# Bij een mislukte lezing blijft de laatste goede waarde maximaal zo veel
+# opeenvolgende cycli behouden, daarna wordt de sensor weer "onbekend".
+STALE_LIMIT = 10
+
 
 def _to_signed(value: int) -> int:
     return ctypes.c_int16(value).value
@@ -133,6 +142,9 @@ class NextCoordinator(DataUpdateCoordinator):
         # Aantal opeenvolgende volledig mislukte registers/batches — de
         # circuit breaker voor busbezetting (zie _register_failure).
         self._consecutive_failures = 0
+        self._cycle = 0
+        self._force_slow = False
+        self._fail_counts: dict[str, int] = {}
         super().__init__(
             hass, _LOGGER, name=DOMAIN,
             update_interval=timedelta(seconds=scan_interval),
@@ -148,7 +160,7 @@ class NextCoordinator(DataUpdateCoordinator):
                 except Exception:
                     pass
             self._client = ModbusTcpClient(
-                host=self.host, port=self.port, timeout=10, retries=3
+                host=self.host, port=self.port, timeout=5, retries=1
             )
             self._client.connect()
         return self._client
@@ -348,7 +360,7 @@ class NextCoordinator(DataUpdateCoordinator):
         if raw is None:
             return None
         value = _to_signed(raw) if signed else raw
-        return round(value * scale, 1) if scale != 1 else value
+        return round(value * scale, 2) if scale != 1 else value
 
     def _read_sensor_run(self, run: list[tuple], data: dict) -> None:
         """Lees één aaneengesloten reeks SENSOR_REGISTERS in één batch-call
@@ -389,6 +401,27 @@ class NextCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Error communicating with heatpump: {err}") from err
 
     def _fetch_all(self) -> dict:
+        """Eén pollcyclus: lees verse data en vul mislukte/overgeslagen
+        waarden aan met de laatst bekende goede waarde."""
+        slow = self._force_slow or self._cycle % SLOW_EVERY == 0
+        self._force_slow = False
+        self._cycle += 1
+        new = self._fetch_cycle(slow)
+        prev = self.data or {}
+        for key, old in prev.items():
+            if key not in new:
+                new[key] = old  # niet gelezen deze cyclus (trage groep)
+        for key, val in list(new.items()):
+            if val is None and prev.get(key) is not None:
+                n = self._fail_counts.get(key, 0) + 1
+                self._fail_counts[key] = n
+                if n <= STALE_LIMIT:
+                    new[key] = prev[key]
+            elif val is not None:
+                self._fail_counts.pop(key, None)
+        return new
+
+    def _fetch_cycle(self, slow: bool) -> dict:
         data: dict = {}
         # Reset de teller voor implausibele waarden aan het begin van elke cyclus.
         self._implausible_count = 0
@@ -402,8 +435,9 @@ class NextCoordinator(DataUpdateCoordinator):
             # het register wordt alleen nog uitgelezen en getoond ter
             # referentie/verificatie (bijv. om te bevestigen dat de unit
             # daadwerkelijk R290 rapporteert).
-            raw = self._read_one(REFRIGERANT_REGISTER)
-            data["Refrigerant Type"] = REFRIGERANT_TYPES.get(raw, f"Unknown ({raw})") if raw is not None else None
+            if slow:
+                raw = self._read_one(REFRIGERANT_REGISTER)
+                data["Refrigerant Type"] = REFRIGERANT_TYPES.get(raw, f"Unknown ({raw})") if raw is not None else None
 
             # ── Compressor target frequency ──
             raw = self._read_one(0x0027)
@@ -423,37 +457,38 @@ class NextCoordinator(DataUpdateCoordinator):
             # Version — allemaal read-only, statisch (verandert alleen bij een
             # firmware-update). Zie const.py voor de uitleg van de mapping/
             # formattering, inclusief een gevlagde inconsistentie in de manual.
-            version_values = self._read_range(VERSION_INFO_START_REGISTER, 4)
-            if version_values is not None:
-                prog_ver_raw, prod_type_raw, prod_type_id_raw, proto_ver_raw = version_values
-            else:
-                prog_ver_raw = prod_type_raw = prod_type_id_raw = proto_ver_raw = None
+            if slow:
+                version_values = self._read_range(VERSION_INFO_START_REGISTER, 4)
+                if version_values is not None:
+                    prog_ver_raw, prod_type_raw, prod_type_id_raw, proto_ver_raw = version_values
+                else:
+                    prog_ver_raw = prod_type_raw = prod_type_id_raw = proto_ver_raw = None
 
-            def _format_version(raw_val: int | None) -> str | None:
-                if raw_val is None:
-                    return None
-                return f"V{raw_val // 100}.{raw_val % 100:02d}"
+                def _format_version(raw_val: int | None) -> str | None:
+                    if raw_val is None:
+                        return None
+                    return f"V{raw_val // 100}.{raw_val % 100:02d}"
 
-            data["Program Version"] = _format_version(prog_ver_raw)
-            data["Program Version Raw"] = prog_ver_raw
-            data["Protocol Version"] = _format_version(proto_ver_raw)
-            data["Protocol Version Raw"] = proto_ver_raw
+                data["Program Version"] = _format_version(prog_ver_raw)
+                data["Program Version Raw"] = prog_ver_raw
+                data["Protocol Version"] = _format_version(proto_ver_raw)
+                data["Protocol Version Raw"] = proto_ver_raw
 
-            data["Product Type Raw"] = prod_type_raw
-            data["Product Type"] = (
-                PRODUCT_TYPE_MAP.get(prod_type_raw, f"Unknown ({prod_type_raw})")
-                if prod_type_raw is not None else None
-            )
-
-            data["Product Type ID Number Raw"] = prod_type_id_raw
-            if prod_type_raw is not None and prod_type_id_raw is not None:
-                id_map = PRODUCT_TYPE_ID_MAP.get(prod_type_raw, {})
-                data["Product Type ID Number"] = id_map.get(
-                    prod_type_id_raw,
-                    f"Unknown (type={prod_type_raw}, id={prod_type_id_raw})",
+                data["Product Type Raw"] = prod_type_raw
+                data["Product Type"] = (
+                    PRODUCT_TYPE_MAP.get(prod_type_raw, f"Unknown ({prod_type_raw})")
+                    if prod_type_raw is not None else None
                 )
-            else:
-                data["Product Type ID Number"] = None
+
+                data["Product Type ID Number Raw"] = prod_type_id_raw
+                if prod_type_raw is not None and prod_type_id_raw is not None:
+                    id_map = PRODUCT_TYPE_ID_MAP.get(prod_type_raw, {})
+                    data["Product Type ID Number"] = id_map.get(
+                        prod_type_id_raw,
+                        f"Unknown (type={prod_type_raw}, id={prod_type_id_raw})",
+                    )
+                else:
+                    data["Product Type ID Number"] = None
 
             # ── Status-/foutregisters — meerdere bitmask-registers ──
             # STATUS_REGISTERS bundelt (register_adres, bits_lijst)-paren:
@@ -477,45 +512,47 @@ class NextCoordinator(DataUpdateCoordinator):
                 data[bit_name] = bool(raw_force & mask) if raw_force is not None else None
 
             # ── Number registers (control register area) — ook gebatcht ──
-            for run in _NUMBER_RUNS:
-                start = run[0][0]
-                values = self._read_range(start, len(run))
-                for i, (address, name, unit, device_class, mn, mx, step) in enumerate(run):
-                    raw = values[i] if values is not None and i < len(values) else None
-                    if raw is not None:
-                        signed_check = _to_signed(raw)
-                        if not (mn <= signed_check <= mx):
-                            _LOGGER.warning(
-                                "Implausibele waarde %d (verwacht %d..%d) voor "
-                                "number-register 0x%04X binnen batch — losse "
-                                "her-lezing", signed_check, mn, mx, address,
-                            )
-                            raw = self._read_one(address, min_val=mn, max_val=mx)
-                    data[name] = _to_signed(raw) if raw is not None else None
+            if slow:
+                for run in _NUMBER_RUNS:
+                    start = run[0][0]
+                    values = self._read_range(start, len(run))
+                    for i, (address, name, unit, device_class, mn, mx, step) in enumerate(run):
+                        raw = values[i] if values is not None and i < len(values) else None
+                        if raw is not None:
+                            signed_check = _to_signed(raw)
+                            if not (mn <= signed_check <= mx):
+                                _LOGGER.warning(
+                                    "Implausibele waarde %d (verwacht %d..%d) voor "
+                                    "number-register 0x%04X binnen batch — losse "
+                                    "her-lezing", signed_check, mn, mx, address,
+                                )
+                                raw = self._read_one(address, min_val=mn, max_val=mx)
+                        data[name] = _to_signed(raw) if raw is not None else None
 
             # ── Switch register ──
             raw = self._read_one(SWITCH_REGISTER)
             data["ON/OFF"] = bool(raw) if raw is not None else None
 
-            # ── Select registers ──
-            for address, name, options_map in SELECT_REGISTERS:
-                raw = self._read_one(address)
-                if raw is None:
-                    data[name] = None
-                else:
-                    rev = {v: k for k, v in options_map.items()}
-                    data[name] = rev.get(raw, f"Unknown ({raw})")
+            if slow:
+                # ── Select registers ──
+                for address, name, options_map in SELECT_REGISTERS:
+                    raw = self._read_one(address)
+                    if raw is None:
+                        data[name] = None
+                    else:
+                        rev = {v: k for k, v in options_map.items()}
+                        data[name] = rev.get(raw, f"Unknown ({raw})")
 
-            # ── P116 Unit Temperature Control Mode (alleen-lezen) ──
-            # Bewust GEEN onderdeel van SELECT_REGISTERS: dit is een
-            # fabrieksparameter (zie const.py voor de toelichting), dus
-            # hier los uitgelezen en als platte waarde opgeslagen i.p.v.
-            # via het schrijfbare select-mechanisme.
-            raw = self._read_one(CONTROL_MODE_REGISTER)
-            if raw is None:
-                data["Unit Temperature Control Mode"] = None
-            else:
-                data["Unit Temperature Control Mode"] = CONTROL_MODE_OPTIONS.get(raw, f"Unknown ({raw})")
+                # ── P116 Unit Temperature Control Mode (alleen-lezen) ──
+                # Bewust GEEN onderdeel van SELECT_REGISTERS: dit is een
+                # fabrieksparameter (zie const.py voor de toelichting), dus
+                # hier los uitgelezen en als platte waarde opgeslagen i.p.v.
+                # via het schrijfbare select-mechanisme.
+                raw = self._read_one(CONTROL_MODE_REGISTER)
+                if raw is None:
+                    data["Unit Temperature Control Mode"] = None
+                else:
+                    data["Unit Temperature Control Mode"] = CONTROL_MODE_OPTIONS.get(raw, f"Unknown ({raw})")
 
             if self._implausible_count:
                 _LOGGER.info(
@@ -554,7 +591,10 @@ class NextCoordinator(DataUpdateCoordinator):
                 result = client.write_register(
                     address=address, value=value & 0xFFFF, device_id=self.slave
                 )
-                return not result.isError()
+                ok = not result.isError()
+                if ok:
+                    self._force_slow = True
+                return ok
             except Exception as err:
                 _LOGGER.error("Write error at 0x%04X: %s", address, err)
                 self._client = None
@@ -597,7 +637,10 @@ class NextCoordinator(DataUpdateCoordinator):
                 write_result = client.write_register(
                     address=register, value=new_value, device_id=self.slave
                 )
-                return not write_result.isError()
+                ok = not write_result.isError()
+                if ok:
+                    self._force_slow = True
+                return ok
             except Exception as err:
                 _LOGGER.error(
                     "Bit-write fout op 0x%04X (mask 0x%04X): %s", register, mask, err

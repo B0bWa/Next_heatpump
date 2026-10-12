@@ -35,6 +35,24 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+try:
+    from pymodbus.exceptions import ConnectionException
+except Exception:  # pragma: no cover
+    ConnectionException = OSError
+
+
+class BusUnreachable(Exception):
+    """De Modbus-gateway is niet bereikbaar (verbinding mislukt/time-out).
+
+    Wordt opgeworpen zodat een pollcyclus meteen stopt in plaats van elk
+    register apart te laten verlopen (dat duurde > 7 minuten bij een
+    onbereikbare gateway en hield de verbinding/lock urenlang bezet).
+    """
+
+
+def _is_connection_error(err: Exception) -> bool:
+    return isinstance(err, (ConnectionException, OSError, TimeoutError))
+
 WRITE_DELAY = 0.25
 REQUEST_DELAY = 0.5
 # Kleine willekeurige variatie op REQUEST_DELAY, zodat onze polling niet
@@ -274,6 +292,8 @@ class NextCoordinator(DataUpdateCoordinator):
                 "Gaf op na %d pogingen voor register 0x%04X: %s — reconnecting",
                 attempts, address, last_err,
             )
+            if _is_connection_error(last_err):
+                raise BusUnreachable(str(last_err)) from last_err
         self._register_failure()
         return None
 
@@ -351,6 +371,8 @@ class NextCoordinator(DataUpdateCoordinator):
                 "Gaf op na %d pogingen voor bereik 0x%04X..0x%04X: %s — reconnecting",
                 attempts, start_address, end_address, last_err,
             )
+            if _is_connection_error(last_err):
+                raise BusUnreachable(str(last_err)) from last_err
         self._register_failure()
         return None
 

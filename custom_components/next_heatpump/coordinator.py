@@ -330,6 +330,11 @@ class NextCoordinator(DataUpdateCoordinator):
                     )
                     continue
 
+                _LOGGER.debug(
+                    "Bereik 0x%04X..0x%04X gelezen: %s",
+                    start_address, end_address,
+                    ", ".join(f"0x{start_address + i:04X}={v}" for i, v in enumerate(values)),
+                )
                 self._register_success()
                 return values
             except Exception as err:

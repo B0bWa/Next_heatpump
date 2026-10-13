@@ -1,0 +1,99 @@
+# =============================================================================
+# VOORBEELD (ONGETEST) - Warmtepomp sturen op dynamische energieprijs
+# EXAMPLE (UNTESTED) - Control the heat pump based on a dynamic energy price
+# =============================================================================
+#
+# NL
+# Dit bestand is een uitgangspunt voor gebruikers met een dynamisch
+# energiecontract (bijv. Frank Energie, Tibber, Zonneplan, ANWB Energie,
+# EnergyZero, Nord Pool). Het is NIET getest op een echte dynamische meter.
+# Controleer het gedrag zelf en volg je energieverbruik en -kosten.
+#
+# Wat het doet:
+#   - Is de stroom goedkoop  -> Running Mode "Boost" (pomp mag harder werken).
+#   - Is de stroom duur/normaal -> terug naar de normale stand uit je schema.
+#
+# Wat het bewust NIET doet:
+#   - Geen aan/uit-schakelen van de pomp (korte compressorcycli).
+#   - Geen geforceerde besturing (Force Control) - dat is een servicefunctie.
+#   Er wordt alleen de select "Running Mode" gewijzigd.
+#
+# Stappen om het te gebruiken:
+#   1. Zoek de prijssensor van je energieleverancier (EUR/kWh) en vul die in
+#      bij `prijs_sensor` hieronder. Dat verschilt per leverancier/integratie.
+#   2. Pas drempel (`goedkoop_onder`) aan. Een vaste drempel is eenvoudig;
+#      een variant met daggemiddelde staat als commentaar eronder.
+#   3. Controleer de entity-ID's (select.running_mode, switch.heatpump_on_off,
+#      sensor.ambient_temp_t1, binary_sensor voor storing) in jouw installatie.
+#   4. Heb je het Scheduler-schema uit de README (Normal overdag, Eco 's nachts)?
+#      Dit voorbeeld zet na een goedkope periode de modus terug naar wat het
+#      schema zou kiezen (Standard 08:00-22:00, anders Eco). Pas de uren aan.
+#
+# EN
+# Starting point for users with a dynamic energy contract. UNTESTED on a real
+# dynamic-price setup - verify the behaviour and monitor your energy use/cost.
+# Only the "Running Mode" select is changed (Boost when cheap, back to the
+# normal scheduled mode otherwise). No on/off switching and no forced control.
+# Fill in your own price sensor (EUR/kWh) and check the entity IDs.
+#
+# DISCLAIMER: use at your own risk, see README.
+# =============================================================================
+
+automation:
+  - alias: "Warmtepomp: boost bij lage energieprijs (voorbeeld)"
+    mode: restart
+    variables:
+      prijs_sensor: sensor.energieprijs_nu        # <-- VUL JE EIGEN SENSOR IN
+      goedkoop_onder: 0.15                        # EUR/kWh, pas aan
+      duur_boven: 0.22                            # EUR/kWh, pas aan (hysterese)
+      max_buiten_temp: 18                         # alleen boosten als het koud is
+    trigger:
+      - platform: state
+        entity_id: sensor.energieprijs_nu         # <-- zelfde sensor als hierboven
+        id: prijs
+      - platform: time_pattern
+        minutes: "/15"
+        id: prijs
+    condition:
+      - condition: state
+        entity_id: switch.heatpump_on_off
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.storing          # <-- pas aan naar jouw storingssensor
+        state: "off"
+      - condition: template
+        value_template: >
+          {{ states(prijs_sensor) not in ['unknown', 'unavailable', 'none', ''] }}
+    action:
+      - variables:
+          prijs: "{{ states(prijs_sensor) | float(99) }}"
+          # Variant met daggemiddelde (verwijder dan de vaste drempels):
+          # goedkoop: "{{ prijs < state_attr(prijs_sensor, 'average') | float(0) * 0.8 }}"
+          goedkoop: "{{ prijs < goedkoop_onder }}"
+          duur: "{{ prijs > duur_boven }}"
+          buiten: "{{ states('sensor.ambient_temp_t1') | float(99) }}"
+          # Normale stand volgens je schema (Standard overdag, Eco 's nachts):
+          normale_modus: >
+            {{ 'Standard Mode' if 8 <= now().hour < 22 else 'Eco' }}
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ goedkoop and buiten < max_buiten_temp }}"
+            sequence:
+              - service: select.select_option
+                target:
+                  entity_id: select.running_mode
+                data:
+                  option: "Boost"
+          - conditions:
+              - condition: template
+                value_template: "{{ duur or buiten >= max_buiten_temp }}"
+              - condition: state
+                entity_id: select.running_mode
+                state: "Boost"
+            sequence:
+              - service: select.select_option
+                target:
+                  entity_id: select.running_mode
+                data:
+                  option: "{{ normale_modus }}"

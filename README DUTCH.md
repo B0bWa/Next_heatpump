@@ -88,6 +88,10 @@ Kopieer de map `custom_components/next_heatpump/` naar de map `config/custom_com
 
 Kort de opzet: je installeert via HACS twee dingen — de Scheduler-integratie (backend) en de bijbehorende scheduler-card (frontend). Omdat de kaart niet vanzelf weet welke opties jouw select.running_mode heeft, geeft het bestand  customize.yaml die koppeling mee ("Standard Mode" → Normaal, "Eco" → Eco/Silent). Daarna maak je de twee tijdsblokken (08:00 → Normaal, 22:00 → Eco) rechtstreeks in de kaart zelf aan — geen YAML meer nodig voor het schema, en volledig tikbaar/aanpasbaar vanaf het dashboard.
 
+## Voorbeeld: dynamische energieprijs (ongetest)
+
+Heb je een dynamisch energiecontract? Dan is `examples/automation_dynamisch_tarief.yaml` een uitgangspunt om de *Running Mode* op Boost te zetten als stroom goedkoop is en terug naar de normale stand als dat niet zo is. Het wijzigt alleen de select `Running Mode` (geen aan/uit-schakeling, geen geforceerde besturing). Het is **ongetest** op een echte dynamische meter: vul je eigen prijssensor en entity-ID's in en volg je energieverbruik en -kosten. Gebruik op eigen risico, zie de disclaimer hieronder.
+
 ## Aangemaakte entiteiten
 
 ### Sensoren (alleen-lezen)

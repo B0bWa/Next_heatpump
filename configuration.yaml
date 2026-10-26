@@ -78,8 +78,8 @@ template:
         unit_of_measurement: "Hz"
         device_class: frequency
         state_class: measurement
-        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_frequency') | is_number }}"
-        state: "{{ states('sensor.stroommeter_heative_warmtepomp_frequency') | float(0) }}"
+        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_ac_frequency') | is_number }}"
+        state: "{{ states('sensor.stroommeter_heative_warmtepomp_ac_frequency') | float(0) }}"
       - name: "WP meter energie"
         unique_id: wp_meter_energie
         unit_of_measurement: "kWh"

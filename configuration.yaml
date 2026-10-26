@@ -49,43 +49,44 @@ sensor: !include_dir_merge_list sensors/
 template:
 
   # Externe stroommeter (PC311-Z-TY, via MQTT) - stabiele namen voor het dashboard.
-  # PAS DE ENTITY-ID's BIJ 'states(...)' AAN naar jouw meter (vermogen in W).
+  # Kanaal A van de meter wordt gebruikt (kanaal B meet iets anders). Controleer de
+  # entity-ID's voor frequentie en energie (energy_a / frequency) in jouw installatie.
   - sensor:
       - name: "WP meter vermogen"
         unique_id: wp_meter_vermogen
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
-        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_vermogen') | is_number }}"
-        state: "{{ states('sensor.stroommeter_heative_warmtepomp_vermogen') | float(0) }}"
+        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_power_a') | is_number }}"
+        state: "{{ states('sensor.stroommeter_heative_warmtepomp_power_a') | float(0) }}"
       - name: "WP meter stroom"
         unique_id: wp_meter_stroom
         unit_of_measurement: "A"
         device_class: current
         state_class: measurement
-        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_stroom') | is_number }}"
-        state: "{{ states('sensor.stroommeter_heative_warmtepomp_stroom') | float(0) }}"
+        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_current_a') | is_number }}"
+        state: "{{ states('sensor.stroommeter_heative_warmtepomp_current_a') | float(0) }}"
       - name: "WP meter spanning"
         unique_id: wp_meter_spanning
         unit_of_measurement: "V"
         device_class: voltage
         state_class: measurement
-        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_spanning') | is_number }}"
-        state: "{{ states('sensor.stroommeter_heative_warmtepomp_spanning') | float(0) }}"
+        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_voltage') | is_number }}"
+        state: "{{ states('sensor.stroommeter_heative_warmtepomp_voltage') | float(0) }}"
       - name: "WP meter frequentie"
         unique_id: wp_meter_frequentie
         unit_of_measurement: "Hz"
         device_class: frequency
         state_class: measurement
-        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_frequentie') | is_number }}"
-        state: "{{ states('sensor.stroommeter_heative_warmtepomp_frequentie') | float(0) }}"
+        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_frequency') | is_number }}"
+        state: "{{ states('sensor.stroommeter_heative_warmtepomp_frequency') | float(0) }}"
       - name: "WP meter energie"
         unique_id: wp_meter_energie
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
-        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_energie') | is_number }}"
-        state: "{{ states('sensor.stroommeter_heative_warmtepomp_energie') | float(0) }}"
+        availability: "{{ states('sensor.stroommeter_heative_warmtepomp_energy_a') | is_number }}"
+        state: "{{ states('sensor.stroommeter_heative_warmtepomp_energy_a') | float(0) }}"
 
       # COP op basis van gemeten vermogen: thermisch (kW) / elektrisch (W)
       - name: "Warmtepomp COP (gemeten)"

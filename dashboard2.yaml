@@ -18,8 +18,10 @@ views:
           - entity: sensor.water_flow
           - entity: sensor.fan_running_speed
           - entity: sensor.next_heatpump_192_168_2_94_compressor_running_frequency
-          - entity: sensor.unit_input_power
-          - entity: sensor.cop
+          - entity: sensor.wp_meter_vermogen
+            name: Elektrisch vermogen (gemeten)
+          - entity: sensor.warmtepomp_cop_gemeten
+            name: COP
         show_header_toggle: false
         visibility:
           - condition: state
@@ -29,22 +31,24 @@ views:
         title: Kerncijfers
         columns: 3
         entities:
-          - entity: sensor.cop
+          - entity: sensor.warmtepomp_cop_gemeten
             name: COP
           - entity: sensor.thermal_power
             name: Thermisch vermogen
-          - entity: sensor.unit_power_consumption
-            name: Verbruik
+          - entity: sensor.wp_meter_vermogen
+            name: Elektrisch vermogen
       - type: entities
         title: Energie vandaag
         entities:
-          - entity: sensor.energieverbruik_warmtepomp_2
+          - entity: sensor.wp_meter_verbruik_dag
             name: Verbruik (elektrisch)
-          - entity: sensor.thermische_energie_warmtepomp
+          - entity: sensor.warmtepomp_thermisch_dag
             name: Opbrengst (thermisch)
+          - entity: sensor.warmtepomp_cop_vandaag
+            name: COP vandaag
       - type: statistics-graph
         entities:
-          - sensor.cop
+          - sensor.warmtepomp_cop_gemeten
         title: COP trend (7 dagen)
         days_to_show: 7
         period: day
@@ -59,11 +63,11 @@ views:
         title: Vermogen laatste 24u
         hours_to_show: 24
         entities:
-          - sensor.unit_power_consumption
+          - sensor.wp_meter_vermogen
           - sensor.thermal_power
       - type: statistics-graph
         entities:
-          - entity: sensor.unit_power_consumption
+          - sensor.wp_meter_energie
           - sensor.thermische_energie_warmtepomp
         title: Energieverbruik & -opbrengst (7 dagen)
         days_to_show: 7
@@ -238,10 +242,19 @@ views:
     icon: mdi:folder-wrench-outline
     cards:
       - type: entities
-        title: Netaansluiting
+        title: Netaansluiting (externe meter)
         entities:
-          - entity: sensor.ac_input_voltage
-          - entity: sensor.ac_input_current
+          - entity: sensor.wp_meter_spanning
+            name: Spanning
+          - entity: sensor.wp_meter_stroom
+            name: Stroom
+          - entity: sensor.wp_meter_vermogen
+            name: Vermogen
+          - entity: sensor.wp_meter_frequentie
+            name: Netfrequentie
+      - type: entities
+        title: Pomp zelf gemeld (ter vergelijking)
+        entities:
           - entity: sensor.unit_input_voltage
           - entity: sensor.unit_input_current
           - entity: sensor.unit_input_power
@@ -264,15 +277,18 @@ views:
         title: Vermogen & rendement
         entities:
           - sensor.thermal_power
-          - sensor.calculated_power
-          - sensor.unit_power_consumption
-          - sensor.cop
+          - entity: sensor.wp_meter_vermogen
+            name: Elektrisch vermogen
+          - entity: sensor.warmtepomp_cop_gemeten
+            name: COP
+          - entity: sensor.wp_meter_energie
+            name: Energieteller
       - type: history-graph
         title: Stroom & vermogen
         hours_to_show: 48
         entities:
-          - sensor.unit_input_current
-          - sensor.unit_power_consumption
+          - sensor.wp_meter_stroom
+          - sensor.wp_meter_vermogen
       - type: entities
         title: Overig
         entities:

@@ -19,15 +19,10 @@ Deze integratie is ontwikkeld en getest met de volgende hardware:
 
 <img width="150" height="125" alt="ew11a" src="https://github.com/user-attachments/assets/10f683a6-cb0b-4d4a-b3b9-e8222eb84d58" />
 
-<img width="150" height="125" alt="Naamloos" src="https://github.com/user-attachments/assets/f37784bc-e5b3-4190-a267-d83e73a5b944" />
 
 
 
-- **E810-R21 Ebyte** RS485-splitter (2 master / 1 slave): 
-  - **Slave-poort** → Modbus RS485-kabel vanaf de warmtepomp
-  - **Master 1** → Elfin EW11 4G-module
-  - **Master 2** → Elfin EW11A (RS485-naar-WiFi/TCP-bridge)
-- De **Elfin EW11A** geconfigureerd als TCP-server op poort **502**
+-- De **Elfin EW11A** geconfigureerd als TCP-server op poort **502**
 - Modbus slave-ID van de warmtepomp: **1** (standaard)
 
 [E810-Rx1+User+Manual_EN_v1.0.pdf](https://github.com/user-attachments/files/31154340/E810-Rx1%2BUser%2BManual_EN_v1.0.pdf)

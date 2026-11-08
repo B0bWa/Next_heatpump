@@ -46,6 +46,18 @@ _PRESET_TO_MODBUS = {
 }
 _MODBUS_TO_PRESET = {v: k for k, v in _PRESET_TO_MODBUS.items()}
 
+# Home Assistant 2026.11 hernoemde de temperatuur-API van ClimateEntity naar
+# native_* (de oude namen stoppen in 2027.11). Op oudere HA-versies bestaan
+# de native_*-namen nog niet; dan koppelen we ze onderaan terug.
+_HAS_NATIVE_API = hasattr(ClimateEntity, "native_temperature_unit")
+
+# Sleutels zoals ze in coordinator.data staan (namen uit const.py, mét punt)
+_SETPOINT_KEYS = {
+    "Cooling":       "Temp. Set Cooling",
+    "Heating":       "Temp. Set Heating",
+    "Floor Heating": "Temp. Set Floor Heating",
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -58,7 +70,7 @@ class NextClimate(CoordinatorEntity, ClimateEntity):
     """Climate entity for Next R290."""
 
     _attr_name = "Next Hp"
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.HEAT, HVACMode.HEAT_COOL]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE |
@@ -72,8 +84,8 @@ class NextClimate(CoordinatorEntity, ClimateEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_climate"
 
     @property
-    def current_temperature(self) -> float | None:
-        return self.coordinator.data.get("Water Inlet Temp T6")
+    def native_current_temperature(self) -> float | None:
+        return self.coordinator.data.get("Water Inlet Temp. T6")
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -101,15 +113,9 @@ class NextClimate(CoordinatorEntity, ClimateEntity):
         return HVACAction.IDLE
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return setpoint for current mode."""
-        mode_str = self.coordinator.data.get("Mode")
-        setpoint_map = {
-            "Cooling":       "Temp Set Cooling",
-            "Heating":       "Temp Set Heating",
-            "Floor Heating": "Temp Set Floor Heating",
-        }
-        key = setpoint_map.get(mode_str)
+        key = _SETPOINT_KEYS.get(self.coordinator.data.get("Mode"))
         return self.coordinator.data.get(key) if key else None
 
     @property
@@ -183,3 +189,9 @@ class NextClimate(CoordinatorEntity, ClimateEntity):
             "manufacturer": "Heative",
             "model": "",
         }
+
+
+if not _HAS_NATIVE_API:  # Home Assistant ouder dan 2026.11
+    NextClimate._attr_temperature_unit = UnitOfTemperature.CELSIUS
+    NextClimate.current_temperature = NextClimate.native_current_temperature
+    NextClimate.target_temperature = NextClimate.native_target_temperature

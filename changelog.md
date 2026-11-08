@@ -1,3 +1,23 @@
+# Wijzigingen — [8-11-2026] (1.1.1)
+
+## 🐛 Bugfixes
+
+### Waarschuwing "deprecated _attr_temperature_unit" in het logboek
+**Bestand:** `climate.py`
+Home Assistant 2026.11 heeft de temperatuur-API van klimaat-entiteiten hernoemd
+(`native_temperature_unit`, `native_current_temperature`,
+`native_target_temperature`); de oude namen werken nog tot 2027.11. De
+klimaat-entiteit gebruikt nu de nieuwe namen, en valt op oudere HA-versies
+automatisch terug op de oude.
+
+### Klimaat-entiteit toonde geen temperaturen
+**Bestand:** `climate.py`
+Huidige temperatuur en setpoint bleven altijd leeg: de entiteit zocht naar
+`"Water Inlet Temp T6"` en `"Temp Set Heating"` (zonder punt), terwijl
+`const.py` ze als `"Water Inlet Temp. T6"` en `"Temp. Set Heating"` registreert.
+
+---
+
 # Wijzigingen — [11-9-2024]
 
 ## 🐛 Bugfixes
